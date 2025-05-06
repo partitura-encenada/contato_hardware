@@ -1,0 +1,11 @@
+Código embarcado e adaptado (NÃO Compatível com bases legacy). Feats:
+
+Reorganização e limpeza  
+(equip)Variáveis de ambiente para calibração automática e modo debug (printa dados no monitor)  
+(equip)Toque forte, toque fraco  
+(equip)ID único derivado do endereço MAC  
+(equip)Transmite yaw e pitch ao invés de apenas o roll  
+(base)Redução de clock da CPU  
+(base)Printa endereço MAC na sequência da startup  
+(base)Dados extras e separados por /t  
+(mock_base)Base falsa, apenas printa dados aleatórios no monitor  

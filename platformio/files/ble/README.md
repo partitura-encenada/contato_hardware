@@ -1,0 +1,1 @@
+Teste usando SimpleBLE para transformar o equipamento em um servidor BLE

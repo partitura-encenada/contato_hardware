@@ -1,0 +1,1 @@
+Código embarcado original (base/ equipamento)

@@ -27,7 +27,7 @@ void loop() {
         message.touch = 1;
     }
     message.roll = message.roll % 180;
-    Serial.println("99/" +
+    Serial.println(String(1) +
             String(message.roll)+'/'+
             String(message.accel)+'/'+
             String(message.touch));

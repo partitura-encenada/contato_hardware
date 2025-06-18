@@ -34,7 +34,6 @@ THE SOFTWARE.
 
 // MotionApps 2.0 DMP implementation, built using the MPU-6050EVB evaluation board
 #define MPU6050_INCLUDE_DMP_MOTIONAPPS20
-
 #include "MPU6050_6Axis_MotionApps20.h"
 
 // Tom Carpenter's conditional PROGMEM code
@@ -536,7 +535,7 @@ uint8_t MPU6050_6Axis_MotionApps20::dmpGetEuler(float *data, Quaternion *q) {
     data[2] = atan2(2*q -> y*q -> z - 2*q -> w*q -> x, 2*q -> w*q -> w + 2*q -> z*q -> z - 1);   // phi
     return 0;
 }
-
+ 
 #ifdef USE_OLD_DMPGETYAWPITCHROLL
 uint8_t MPU6050_6Axis_MotionApps20::dmpGetYawPitchRoll(float *data, Quaternion *q, VectorFloat *gravity) {
     // yaw: (about Z axis)
@@ -550,7 +549,7 @@ uint8_t MPU6050_6Axis_MotionApps20::dmpGetYawPitchRoll(float *data, Quaternion *
 #else 
 uint8_t MPU6050_6Axis_MotionApps20::dmpGetYawPitchRoll(float *data, Quaternion *q, VectorFloat *gravity) {
     // yaw: (about Z axis)
-    data[0] = atan2(2*q -> x*q -> y - 2*q -> w*q -> z, 2*q -> w*q -> w + 2*q -> x*q -> x - 1);
+    data[0] = atan2(2*q -> x*q -> y - 2*q -> w *q -> z, 2*q -> z*q -> w + 2*q -> x*q -> x - 1);
     // pitch: (nose up/down, about Y axis)
     data[1] = atan2(gravity -> x , sqrt(gravity -> y*gravity -> y + gravity -> z*gravity -> z));
     // roll: (tilt left/right, about X axis)

@@ -1,190 +1,299 @@
-//LIBRARIES
-#include "MPU6050_6Axis_MotionApps20.h"
-#include <esp_now.h>
-#include <WiFi.h>
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-    #include "Wire.h"
-#endif
 
-//MPU Initialization
-MPU6050 mpu;
-#define INTERRUPT_PIN 35
-bool dmpReady = false;  
-uint8_t mpuIntStatus;   
-uint8_t devStatus;      
-uint16_t packetSize;   
-uint16_t fifoCount;    
-uint8_t fifoBuffer[64];
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorInt16 aa;         // [x, y, z]            accel sensor measurements
-VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
-VectorFloat gravity;    // [x, y, z]            gravity vector
-float euler[3];         // [psi, theta, phi]    Euler angle container
-float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+// If you use Unit OLED, write this.
+// #include <M5UnitOLED.h>
 
-volatile bool mpuInterrupt = false;    
-void dmpDataReady() {
-    mpuInterrupt = true;
-}
-
-//ESPNOW Initialization
-uint8_t broadcastAddress[] = {0x8c, 0x4b, 0x14, 0x9a, 0x44, 0xb4};
-// Base 3 ---- 0xB0, 0xA7, 0x32, 0xDE, 0xAF, 0x18
-// Base 4 ---- 0x40, 0x22, 0xD8, 0x4F, 0x5F, 0xD8
-// Base 5 ---- 0xA8, 0x42, 0xE3, 0x45, 0x95, 0xE8
-// Base 6 ---- 0xB0, 0xA7, 0x32, 0xD7, 0x58, 0x7C
-// Base 7 ---- 0xA0, 0xDD, 0x6C, 0x0F, 0xBB, 0x3C
-// Base 8 ---- 0x8C, 0x4B, 0x14, 0x9A, 0x69, 0x70
-// Base 9 ---- 0x8C, 0x4B, 0x14, 0xDA, 0xBA, 0x00
-
-//Message Struct
-typedef struct struct_message {
-    int id; // must be unique for each sender board
-    int gyro;
-    int accel;
-    int touch;
-} struct_message;
-
-struct_message MIDImessage;
-esp_now_peer_info_t peerInfo;
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  //Serial.print("\r\nLast Packet Send Status:\t");
-  //Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-}
-
-//Variables
-float ypr_mod = 0;
-int mediaAccel;
-int buttonState;             // the current reading from the input pin
-int lastButtonState = 0;
+// If you use Unit LCD, write this.
+// #include <M5UnitLCD.h>
 
 
-void setup() {
-    #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-        Wire.begin();
-        Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
-    #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-        Fastwire::setup(400, true);
-    #endif
-  Serial.begin(115200);
-  //GYRO Initialization
-  Serial.println(F("Initializing I2C devices..."));
-  mpu.initialize();
-  pinMode(INTERRUPT_PIN, INPUT);
-  Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-  Serial.println(F("\nSend any character to begin DMP programming and demo: "));
-  //while (Serial.available() && Serial.read()); // empty buffer
-  //while (!Serial.available());                 // wait for data
-  //while (Serial.available() && Serial.read()); // empty buffer again 
-  Serial.println(F("Initializing DMP..."));
-  devStatus = mpu.dmpInitialize();
-
-  //Offsets
-  mpu.setXGyroOffset(220);//220
-  mpu.setYGyroOffset(76);//76
-  mpu.setZGyroOffset(-85);//-85
-  mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
-  if (devStatus == 0) {
-          // Calibration Time: generate offsets and calibrate our MPU6050
-          mpu.CalibrateAccel(6);
-          mpu.CalibrateGyro(6);
-          mpu.PrintActiveOffsets();
-          // turn on the DMP, now that it's ready
-          Serial.println(F("Enabling DMP..."));
-          mpu.setDMPEnabled(true);
-  
-          // enable Arduino interrupt detection
-          Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
-          Serial.print(digitalPinToInterrupt(INTERRUPT_PIN));
-          Serial.println(F(")..."));
-          attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
-          mpuIntStatus = mpu.getIntStatus();
-  
-          // set our DMP Ready flag so the main loop() function knows it's okay to use it
-          Serial.println(F("DMP ready! Waiting for first interrupt..."));
-          dmpReady = true;
-  
-          // get expected DMP packet size for later comparison
-          packetSize = mpu.dmpGetFIFOPacketSize();
-      } 
-      else {
-          // ERROR!
-          // 1 = initial memory load failed
-          // 2 = DMP configuration updates failed
-          // (if it's going to break, usually the code will be 1)
-          Serial.print(F("DMP Initialization failed (code "));
-          Serial.print(devStatus);
-          Serial.println(F(")"));
-      }
+// Include this to enable the M5 global instance.
+#include <M5Unified.h>
+#include "MadgwickAHRS.h"
+// Strength of the calibration operation;
+// 0: disables calibration.
+// 1 is weakest and 255 is strongest.
+static constexpr const uint8_t calib_value = 64;
 
 
-  //ESPNOW Initialization
-  WiFi.mode(WIFI_STA);
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-  esp_now_register_send_cb(OnDataSent);
-  // Register peer
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  peerInfo.channel = 0;  
-  peerInfo.encrypt = false;
-  // Add peer        
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
-    return;
-  }
-}
+// This sample code performs calibration by clicking on a button or screen.
+// After 10 seconds of calibration, the results are stored in NVS.
+// The saved calibration values are loaded at the next startup.
+// 
+// === How to calibration ===
+// ※ Calibration method for Accelerometer
+//    Change the direction of the main unit by 90 degrees
+//     and hold it still for 2 seconds. Repeat multiple times.
+//     It is recommended that as many surfaces as possible be on the bottom.
+//
+// ※ Calibration method for Gyro
+//    Simply place the unit on a quiet desk and hold it still.
+//    It is recommended that this be done after the accelerometer calibration.
+// 
+// ※ Calibration method for geomagnetic sensors
+//    Rotate the main unit slowly in multiple directions.
+//    It is recommended that as many surfaces as possible be oriented to the north.
+// 
+// Values for extremely large attitude changes are ignored.
+// During calibration, it is desirable to move the device as gently as possible.
 
-
-void loop() {
-  
-    MIDImessage.id = 5; 
-    // if programming failed, don't try to do anything
-    if (!dmpReady) return;
-    // read a packet from FIFO
-    if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) { 
-      
-        mpu.dmpGetQuaternion(&q, fifoBuffer);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetAccel(&aa, fifoBuffer);
-        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-        ypr_mod = ypr[2] * 180/M_PI;
-
-        int pressed = touchRead();  
-    
-        MIDImessage.gyro = ypr_mod;
-        MIDImessage.accel = mediaAccel;
-        MIDImessage.touch = pressed;
-        esp_now_send(broadcastAddress, (uint8_t *) &MIDImessage, sizeof(MIDImessage));
-        Serial.println("MIDI SENT");
-   }
-   
-  delay(10);
-}
-
-
-int touchRead()
+struct rect_t
 {
-    int media = 0;
-    mediaAccel = 0;
-    for(int i=0; i< 100; i++)
+  int32_t x;
+  int32_t y;
+  int32_t w;
+  int32_t h;
+};
+
+static constexpr const uint32_t color_tbl[18] = 
+{
+0xFF0000u, 0xCCCC00u, 0xCC00FFu,
+0xFFCC00u, 0x00FF00u, 0x0088FFu,
+0xFF00CCu, 0x00FFCCu, 0x0000FFu,
+0xFF0000u, 0xCCCC00u, 0xCC00FFu,
+0xFFCC00u, 0x00FF00u, 0x0088FFu,
+0xFF00CCu, 0x00FFCCu, 0x0000FFu,
+};
+static constexpr const float coefficient_tbl[3] = { 0.5f, (1.0f / 256.0f), (1.0f / 1024.0f) };
+
+static auto &dsp = (M5.Display);
+static rect_t rect_graph_area;
+static rect_t rect_text_area;
+
+static uint8_t calib_countdown = 0;
+
+static int prev_xpos[18];
+
+void drawBar(int32_t ox, int32_t oy, int32_t nx, int32_t px, int32_t h, uint32_t color)
+{
+  uint32_t bgcolor = (color >> 3) & 0x1F1F1Fu;
+  if (px && ((nx < 0) != (px < 0)))
+  {
+    dsp.fillRect(ox, oy, px, h, bgcolor);
+    px = 0;
+  }
+  if (px != nx)
+  {
+    if ((nx > px) != (nx < 0))
     {
-      media += touchRead(T3);
-      mediaAccel += aaReal.x;
-      
+      bgcolor = color;
     }
-    media =  media/100;
-    mediaAccel = mediaAccel/100;
-    if (media < 20)
+    dsp.setColor(bgcolor);
+    dsp.fillRect(nx + ox, oy, px - nx, h);
+  }
+}
+
+void drawGraph(const rect_t& r, const m5::imu_data_t& data)
+{
+  float aw = (128 * r.w) >> 1;
+  float gw = (128 * r.w) / 256.0f;
+  float mw = (128 * r.w) / 1024.0f;
+  int ox = (r.x + r.w)>>1;
+  int oy = r.y;
+  int h = (r.h / 18) * (calib_countdown ? 1 : 2);
+  int bar_count = 9 * (calib_countdown ? 2 : 1);
+
+  dsp.startWrite();
+  for (int index = 0; index < bar_count; ++index)
+  {
+    float xval;
+    if (index < 9)
     {
-      return 1;
+      auto coe = coefficient_tbl[index / 3] * r.w;
+      xval = data.value[index] * coe;
     }
     else
     {
-      return 0;
+      xval = M5.Imu.getOffsetData(index - 9) * (1.0f / (1 << 19));
     }
+
+    // for Linear scale graph.
+    float tmp = xval;
+
+    // The smaller the value, the larger the amount of change in the graph.
+//  float tmp = sqrtf(fabsf(xval * 128)) * (signbit(xval) ? -1 : 1);
+
+    int nx = tmp;
+    int px = prev_xpos[index];
+    if (nx != px)
+    prev_xpos[index] = nx;
+    drawBar(ox, oy + h * index, nx, px, h - 1, color_tbl[index]);
+  }
+  dsp.endWrite();
+}
+
+void updateCalibration(uint32_t c, bool clear = false)
+{
+  calib_countdown = c;
+
+  if (c == 0) {
+    clear = true;
+  }
+
+  if (clear)
+  {
+    memset(prev_xpos, 0, sizeof(prev_xpos));
+    dsp.fillScreen(TFT_BLACK);
+
+    if (c)
+    { // Start calibration.
+      M5.Imu.setCalibration(calib_value, calib_value, calib_value);
+    // ※ The actual calibration operation is performed each time during M5.Imu.update.
+    // 
+    // There are three arguments, which can be specified in the order of Accelerometer, gyro, and geomagnetic.
+    // If you want to calibrate only the Accelerometer, do the following.
+    // M5.Imu.setCalibration(100, 0, 0);
+    //
+    // If you want to calibrate only the gyro, do the following.
+    // M5.Imu.setCalibration(0, 100, 0);
+    //
+    // If you want to calibrate only the geomagnetism, do the following.
+    // M5.Imu.setCalibration(0, 0, 100);
+    }
+    else
+    { // Stop calibration. (Continue calibration only for the geomagnetic sensor)
+      M5.Imu.setCalibration(0, 0, calib_value);
+
+      // If you want to stop all calibration, write this.
+      // M5.Imu.setCalibration(0, 0, 0);
+
+      // save calibration values.
+      M5.Imu.saveOffsetToNVS();
+    }
+  }
+
+  auto backcolor = (c == 0) ? TFT_BLACK : TFT_BLUE;
+  dsp.fillRect(rect_text_area.x, rect_text_area.y, rect_text_area.w, rect_text_area.h, backcolor);
+
+  if (c)
+  {
+    dsp.setCursor(rect_text_area.x + 2, rect_text_area.y + 1);
+    dsp.setTextColor(TFT_WHITE, TFT_BLUE);
+    dsp.printf("Countdown:%d ", c);
+  }
+}
+
+void startCalibration(void)
+{
+  updateCalibration(10, true);
+}
+
+void setup(void)
+{
+  auto cfg = M5.config();
+  Serial.begin(115200);
+  // If you want to use external IMU, write this
+//cfg.external_imu = true;
+
+  M5.begin(cfg);
+
+  const char* name;
+  auto imu_type = M5.Imu.getType();
+  switch (imu_type)
+  {
+  case m5::imu_none:        name = "not found";   break;
+  case m5::imu_sh200q:      name = "sh200q";      break;
+  case m5::imu_mpu6050:     name = "mpu6050";     break;
+  case m5::imu_mpu6886:     name = "mpu6886";     break;
+  case m5::imu_mpu9250:     name = "mpu9250";     break;
+  case m5::imu_bmi270:      name = "bmi270";      break;
+  default:                  name = "unknown";     break;
+  };
+  M5_LOGI("imu:%s", name);
+  M5.Display.printf("imu:%s", name);
+
+  if (imu_type == m5::imu_none)
+  {
+    for (;;) { delay(1); }
+  }
+
+  int32_t w = dsp.width();
+  int32_t h = dsp.height();
+  if (w < h)
+  {
+    dsp.setRotation(dsp.getRotation() ^ 1);
+    w = dsp.width();
+    h = dsp.height();
+  }
+  int32_t graph_area_h = ((h - 8) / 18) * 18;
+  int32_t text_area_h = h - graph_area_h;
+  float fontsize = text_area_h / 8;
+  dsp.setTextSize(fontsize);
+
+  rect_graph_area = { 0, 0, w, graph_area_h };
+  rect_text_area = {0, graph_area_h, w, text_area_h };
+
+
+  // Read calibration values from NVS.
+  if (!M5.Imu.loadOffsetFromNVS())
+  {
+    startCalibration();
+  }
+}
+
+void loop(void)
+{
+  static uint32_t frame_count = 0;
+  static uint32_t prev_sec = 0;
+
+  // To update the IMU value, use M5.Imu.update.
+  // If a new value is obtained, the return value is non-zero.
+  auto imu_update = M5.Imu.update();
+  if (imu_update)
+  {
+    // Obtain data on the current value of the IMU.
+    auto data = M5.Imu.getImuData();
+    drawGraph(rect_graph_area, data);
+/*
+    // The data obtained by getImuData can be used as follows.
+    data.accel.x;      // accel x-axis value.
+    data.accel.y;      // accel y-axis value.
+    data.accel.z;      // accel z-axis value.
+    data.accel.value;  // accel 3values array [0]=x / [1]=y / [2]=z.
+
+    data.gyro.x;      // gyro x-axis value.
+    data.gyro.y;      // gyro y-axis value.
+    data.gyro.z;      // gyro z-axis value.
+    data.gyro.value;  // gyro 3values array [0]=x / [1]=y / [2]=z.
+
+    data.mag.x;       // mag x-axis value.
+    data.mag.y;       // mag y-axis value.
+    data.mag.z;       // mag z-axis value.
+    data.mag.value;   // mag 3values array [0]=x / [1]=y / [2]=z.
+
+    data.value;       // all sensor 9values array [0~2]=accel / [3~5]=gyro / [6~8]=mag
+
+    M5_LOGV("ax:%f  ay:%f  az:%f", data.accel.x, data.accel.y, data.accel.z);
+    M5_LOGV("gx:%f  gy:%f  gz:%f", data.gyro.x , data.gyro.y , data.gyro.z );
+    M5_LOGV("mx:%f  my:%f  mz:%f", data.mag.x  , data.mag.y  , data.mag.z  );
+//*/
+    ++frame_count;
+  }
+  else
+  {
+    M5.update();
+
+    // Calibration is initiated when a button or screen is clicked.
+    if (M5.BtnA.wasClicked() || M5.BtnPWR.wasClicked() || M5.Touch.getDetail().wasClicked())
+    {
+      startCalibration();
+    }
+  }
+
+  int32_t sec = millis() / 1000;
+  if (prev_sec != sec)
+  {
+    prev_sec = sec;
+    M5_LOGI("sec:%d  frame:%d", sec, frame_count);
+    frame_count = 0;
+
+    if (calib_countdown)
+    {
+      updateCalibration(calib_countdown - 1);
+    }
+
+    if ((sec & 7) == 0)
+    { // prevent WDT.
+      vTaskDelay(1);
+    }
+  }
 }

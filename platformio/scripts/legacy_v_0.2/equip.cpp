@@ -5,7 +5,7 @@
 #include "Wire.h"
 
 // Constantes e pseudo-constantes
-// #define DEBUG
+#define DEBUG
 #define AUTO_CALLIBRATION
 const int   touch_sensitivity = 20; //20  
 const int   callibration_time = 6; //6  
@@ -117,6 +117,7 @@ void loop() {
         
         #ifdef DEBUG
             Serial.println(
+                String('id falso') + '\t' +
                 String(message.roll) + '\t' +
                 String(message.accel) + '\t' +
                 String(message.touch));

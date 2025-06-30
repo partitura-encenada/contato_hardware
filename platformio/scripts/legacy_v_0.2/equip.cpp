@@ -23,13 +23,6 @@ VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
 uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xdc, 0xdd, 0x88};
-// Base 3 ---- 0xB0, 0xA7, 0x32, 0xDE, 0xAF, 0x18
-// Base 4 ---- 0x40, 0x22, 0xD8, 0x4F, 0x5F, 0xD8
-// Base 5 ---- 0xA8, 0x42, 0xE3, 0x45, 0x95, 0xE8
-// Base 6 ---- 0xB0, 0xA7, 0x32, 0xD7, 0x58, 0x7C
-// Base 7 ---- 0xA0, 0xDD, 0x6C, 0x0F, 0xBB, 0x3C
-// Base 8 ---- 0x8C, 0x4B, 0x14, 0x9A, 0x69, 0x70
-// Base 9 ---- 0x8C, 0x4B, 0x14, 0xDA, 0xBA, 0x00
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
     int id = 9;
@@ -61,12 +54,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setXGyroOffset(220);    // Cada sensor tem um valor diferente
-        mpu.setYGyroOffset(76);     // Para consultar os valores, calibre e 
-        mpu.setZGyroOffset(-85);    // mpu.PrintActiveOffsets
-        mpu.setXAccelOffset();      // valores na ordem 
-        mpu.setYAccelOffset();      //
-        mpu.setZAccelOffset(1788);  //
+        mpu.setZAccelOffset(348); 
+        mpu.setXGyroOffset(29);    
+        mpu.setYGyroOffset(76);     
+        mpu.setZGyroOffset(-85);    
     #endif
  
     if (dev_status == 0) { // Sucesso

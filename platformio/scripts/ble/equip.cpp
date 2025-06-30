@@ -70,12 +70,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setXGyroOffset(220);    // Cada sensor tem um valor diferente
-        mpu.setYGyroOffset(76);     // Para consultar os valores, calibre e 
-        mpu.setZGyroOffset(-85);    // mpu.PrintActiveOffsets
-        mpu.setXAccelOffset();      // valores na ordem 
-        mpu.setYAccelOffset();      //
-        mpu.setZAccelOffset(1788);  //
+        mpu.setZAccelOffset(1788);  
+        mpu.setXGyroOffset(220);
+        mpu.setYGyroOffset(76);
+        mpu.setZGyroOffset(-85);
     #endif
  
     if (dev_status == 0) { // Sucesso
@@ -133,7 +131,7 @@ void loop() {
                 NimBLECharacteristic* pGyroChr = pSvc->getCharacteristic(GYRO_CHARACTERISTIC_UUID);                
                 NimBLECharacteristic* pAccelChr = pSvc->getCharacteristic(ACCEL_CHARACTERISTIC_UUID);                
                 if (pTouchChr) {
-                    pTouchChr->setValue(touch_read());
+                    pTouchChr->setValue(1 ? touchRead(T3) < 30 : 0);
                     pTouchChr->notify();
                 }
                 if (pGyroChr) {
@@ -149,21 +147,21 @@ void loop() {
     }
 }
 
-int touch_read(){
-  int sum_n = 0;
-  int n = 50;
-  for(int i = 0; i < n; i++){
-    sum_n += touchRead(T3);
-  }
-  int avg =  sum_n/n;
-  if (avg  < 10){
-    return 1; // normal
-  }
-  if (avg < 60){
-    return 2; // pianissimo
-  }
-  else
-  {
-    return 0; // off
-  }
-}
+// int touch_read(){
+//   int sum_n = 0;
+//   int n = 50;
+//   for(int i = 0; i < n; i++){
+//     sum_n += touchRead(T3);
+//   }
+//   int avg =  sum_n/n;
+//   if (avg  < 10){
+//     return 1; // normal
+//   }
+//   if (avg < 40){
+//     return 2; // pianissimo
+//   }
+//   else
+//   {
+//     return 0; // off
+//   }
+// }

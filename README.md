@@ -1,7 +1,7 @@
-#Contato (hardware)
+# Contato (hardware)
 Código embarcado do aparelho Contato sendo desenvolvido pelo curso de Dança da Universidade Federal do Rio de Janeiro em parceria com o Parque Tecnológico
 
-#📁 Organização 
+# 📁 Organização 
 contato_hardware/
 ├── arduino # estrutura de projeto para arduino
 └── platformio # estrutura de projeto para platformio +

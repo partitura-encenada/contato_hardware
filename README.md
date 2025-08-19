@@ -3,6 +3,7 @@ Código embarcado do aparelho Contato sendo desenvolvido pelo curso de Dança da
 
 # 📁 Organização 
 contato_hardware/
+
 ├── arduino # estrutura de projeto para arduino
 
 └── platformio # estrutura de projeto para platformio +

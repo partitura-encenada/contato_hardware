@@ -2,18 +2,19 @@
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <NimBLEDevice.h>
 #include "Wire.h"
+#include "../util/util.h"
+#include <WiFi.h>
 
 // Constantes e pseudo-constantes
-// #define DEBUG
 #define AUTO_CALLIBRATION
+
 //  https://www.uuidgenerator.net/
 #define SERVICE_UUID "cc5b7017-78da-4891-a348-569271d5f67c"
 #define TOUCH_CHARACTERISTIC_UUID "62c84a29-95d6-44e4-a13d-a9372147ce21"
 #define GYRO_CHARACTERISTIC_UUID "9b7580ed-9fc2-41e7-b7c2-f63de01f0692"
 #define ACCEL_CHARACTERISTIC_UUID "f62094cf-21a7-4f71-bb3f-5a5b17bb134e"
 
-const int   touch_sensitivity = 20; //20  
-const int   callibration_time = 6; //6
+const int   touch_sensitivity = 30; //20  
 
 static NimBLEServer* pServer;
 MPU6050 mpu;
@@ -58,22 +59,20 @@ void setup() {
     // Inicializar Wire, Serial (caso monitorando) e MPU
     Wire.begin();
     Wire.setClock(400000); // Clock I2C 400khz. Comente caso erro na compilação 
-    #ifdef DEBUG
-        Serial.begin(115200);
-    #endif
+    Serial.begin(115200);
     mpu.initialize();
-    #ifdef DEBUG
-        Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));  
-    #endif    
+    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));  
+    WiFi.mode(WIFI_STA); // Wi-fi Station
+    Util::PrintMACAddr(); 
     
     // DMP
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1788);  
-        mpu.setXGyroOffset(220);
-        mpu.setYGyroOffset(76);
-        mpu.setZGyroOffset(-85);
+        mpu.setZAccelOffset(1330); 
+        mpu.setXGyroOffset(47);    
+        mpu.setYGyroOffset(3);     
+        mpu.setZGyroOffset(10);      
     #endif
  
     if (dev_status == 0) { // Sucesso
@@ -131,7 +130,7 @@ void loop() {
                 NimBLECharacteristic* pGyroChr = pSvc->getCharacteristic(GYRO_CHARACTERISTIC_UUID);                
                 NimBLECharacteristic* pAccelChr = pSvc->getCharacteristic(ACCEL_CHARACTERISTIC_UUID);                
                 if (pTouchChr) {
-                    pTouchChr->setValue(1 ? touchRead(T3) < 30 : 0);
+                    pTouchChr->setValue(1 ? touchRead(T3) < touch_sensitivity : 0);
                     pTouchChr->notify();
                 }
                 if (pGyroChr) {

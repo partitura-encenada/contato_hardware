@@ -2,6 +2,7 @@
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <esp_now.h>
 #include <WiFi.h>
+#include <EEPROM.h>
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     #include "Wire.h"
 #endif
@@ -29,7 +30,8 @@ void dmpDataReady() {
 }
 
 //ESPNOW Initialization
-uint8_t broadcastAddress[] = {0xA8, 0x42, 0xE3, 0x45, 0x95, 0xE8};
+uint8_t broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x47, 0xe8};
+// 3 - 0xcc, 0xdb, 0xa7, 0x91, 0x47, 0xe8
 
 //Message Struct
 typedef struct struct_message {
@@ -74,32 +76,46 @@ void setup() {
   devStatus = mpu.dmpInitialize();
 
   //Offsets
-  mpu.setXGyroOffset(220);//220
-  mpu.setYGyroOffset(76);//76
-  mpu.setZGyroOffset(-85);//-85
-  mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
   if (devStatus == 0) {
-          // Calibration Time: generate offsets and calibrate our MPU6050
-          mpu.CalibrateAccel(6);
-          mpu.CalibrateGyro(6);
-          mpu.PrintActiveOffsets();
-          // turn on the DMP, now that it's ready
-          Serial.println(F("Enabling DMP..."));
-          mpu.setDMPEnabled(true);
-  
-          // enable Arduino interrupt detection
-          Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
-          Serial.print(digitalPinToInterrupt(INTERRUPT_PIN));
-          Serial.println(F(")..."));
-          attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
-          mpuIntStatus = mpu.getIntStatus();
-  
-          // set our DMP Ready flag so the main loop() function knows it's okay to use it
-          Serial.println(F("DMP ready! Waiting for first interrupt..."));
-          dmpReady = true;
-  
-          // get expected DMP packet size for later comparison
-          packetSize = mpu.dmpGetFIFOPacketSize();
+        // Calibration Time: generate offsets and calibrate our MPU6050
+        // TENTANDO SALVAR OFFSETS MEMORIA PERMANENTE DO ESP XD
+        EEPROM.begin(128);
+        if (EEPROM.readShort(0) == 0)
+        {
+            mpu.CalibrateAccel(6);
+            mpu.CalibrateGyro(6);
+            int16_t* offsets = mpu.GetActiveOffsets();
+            for (int i = 0; i < 6; i++)
+            {
+                EEPROM.writeShort(i*16, offsets[i]);
+            }
+        }
+        else 
+        {   
+            mpu.setZAccelOffset(EEPROM.readShort(2 * 16));
+            mpu.setXGyroOffset(EEPROM.readShort(3 * 16));
+            mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
+            mpu.setZGyroOffset(EEPROM.readShort(5 * 16));
+        }
+        // EEPROM.writeShort(0,0); // Descomente para resetar a calibração
+        EEPROM.end();
+        // turn on the DMP, now that it's ready
+        Serial.println(F("Enabling DMP..."));
+        mpu.setDMPEnabled(true);
+
+        // enable Arduino interrupt detection
+        Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
+        Serial.print(digitalPinToInterrupt(INTERRUPT_PIN));
+        Serial.println(F(")..."));
+        attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
+        mpuIntStatus = mpu.getIntStatus();
+
+        // set our DMP Ready flag so the main loop() function knows it's okay to use it
+        Serial.println(F("DMP ready! Waiting for first interrupt..."));
+        dmpReady = true;
+
+        // get expected DMP packet size for later comparison
+        packetSize = mpu.dmpGetFIFOPacketSize();
       } 
       else {
           // ERROR!
@@ -145,39 +161,14 @@ void loop() {
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-        ypr_mod = ypr[2] * 180/M_PI;
-
-        int pressed = touchRead();  
-    
+        ypr_mod = ypr[2] * 180/M_PI;    
         MIDImessage.gyro = ypr_mod;
-        MIDImessage.accel = mediaAccel;
-        MIDImessage.touch = pressed;
+        MIDImessage.accel = aaReal.x;
+        MIDImessage.touch = 1 ? touchRead(T3) < 30 : 0;
         esp_now_send(broadcastAddress, (uint8_t *) &MIDImessage, sizeof(MIDImessage));
-        Serial.println("MIDI SENT");
    }
    
   delay(10);
 }
 
 
-int touchRead()
-{
-    int media = 0;
-    mediaAccel = 0;
-    for(int i=0; i< 100; i++)
-    {
-      media += touchRead(T3);
-      mediaAccel += aaReal.x;
-      
-    }
-    media =  media/100;
-    mediaAccel = mediaAccel/100;
-    if (media < 20)
-    {
-      return 1;
-    }
-    else
-    {
-      return 0;
-    }
-}

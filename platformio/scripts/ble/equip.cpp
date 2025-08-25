@@ -104,7 +104,7 @@ void setup() {
     // BLE
     NimBLEDevice::init("Contato");
     NimBLEDevice::setSecurityAuth(/*BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM |*/ BLE_SM_PAIR_AUTHREQ_SC);
-    NimBLEDevice::setMTU(24);
+    NimBLEDevice::setMTU(128);
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(&serverCallbacks);
 

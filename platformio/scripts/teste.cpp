@@ -4,9 +4,9 @@
 #include <WiFi.h>
 #include "Wire.h"
 #include "../util/util.h"
+#include <EEPROM.h>
 
 // Constantes e pseudo-constantes
-#define AUTO_CALLIBRATION
 const int   touch_sensitivity = 20; //20  
 const int   callibration_time = 6; //6  
 
@@ -41,19 +41,31 @@ void setup() {
     // DMP
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
-    #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(348); 
-        mpu.setXGyroOffset(29);    
-        mpu.setYGyroOffset(76);     
-        mpu.setZGyroOffset(-85);    
-    #endif
  
     if (dev_status == 0) { // Sucesso
-        #ifdef AUTO_CALLIBRATION
-            mpu.CalibrateAccel(callibration_time);
-            mpu.CalibrateGyro(callibration_time);
-            mpu.PrintActiveOffsets();
-        #endif
+
+        //  TENTANDO SALVAR OFFSETS MEMORIA PERMANENTE DO ESP XD
+        EEPROM.begin(128);
+        if (EEPROM.readShort(0) == 0)
+        {
+            mpu.CalibrateAccel(6);
+            mpu.CalibrateGyro(6);
+            int16_t* offsets = mpu.GetActiveOffsets();
+            for (int i = 0; i < 6; i++)
+            {
+                EEPROM.writeShort(i*16, offsets[i]);
+            }
+        }
+        else 
+        {   
+            mpu.setZAccelOffset(EEPROM.readShort(2 * 16));
+            mpu.setXGyroOffset(EEPROM.readShort(3 * 16));
+            mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
+            mpu.setZGyroOffset(EEPROM.readShort(5 * 16));
+        }
+        // EEPROM.writeShort(0,0); // Descomente para resetar a calibração
+        EEPROM.end();
+        
         dmp_ready = true;
         packet_size = mpu.dmpGetFIFOPacketSize();
     } 

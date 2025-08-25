@@ -4,9 +4,8 @@
 #include "Wire.h"
 #include "../util/util.h"
 #include <WiFi.h>
-
+#include <EEPROM.h>
 // Constantes e pseudo-constantes
-// #define AUTO_CALLIBRATION
 
 //  https://www.uuidgenerator.net/
 #define SERVICE_UUID "cc5b7017-78da-4891-a348-569271d5f67c"
@@ -42,7 +41,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
          *  Latency: number of intervals allowed to skip.
          *  Timeout: 10 millisecond increments.
          */
-        pServer->updateConnParams(connInfo.getConnHandle(), 30, 40, 2, 180);
+        pServer->updateConnParams(connInfo.getConnHandle(), 6, 8, 0, 180);
     }
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
@@ -67,20 +66,33 @@ void setup() {
     
     // DMP
     dev_status = mpu.dmpInitialize();
-    mpu.setDMPEnabled(true);       
-    #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1330); 
-        mpu.setXGyroOffset(47);    
-        mpu.setYGyroOffset(3);     
-        mpu.setZGyroOffset(10);      
-    #endif
+    mpu.setDMPEnabled(true);           
  
     if (dev_status == 0) { // Sucesso
-        #ifdef AUTO_CALLIBRATION
+
+        //  TENTANDO SALVAR OFFSETS MEMORIA PERMANENTE DO ESP XD
+        EEPROM.begin(128);
+        if (EEPROM.readShort(0) == 0)
+        {
             mpu.CalibrateAccel(6);
             mpu.CalibrateGyro(6);
-            mpu.PrintActiveOffsets();
-        #endif
+            int16_t* offsets = mpu.GetActiveOffsets();
+            for (int i = 0; i < 6; i++)
+            {
+                EEPROM.writeShort(i*16, offsets[i]);
+            }
+        }
+        else 
+        {   
+            mpu.setZAccelOffset(EEPROM.readShort(2 * 16));
+            mpu.setXGyroOffset(EEPROM.readShort(3 * 16));
+            mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
+            mpu.setZGyroOffset(EEPROM.readShort(5 * 16));
+        }
+        // EEPROM.writeShort(0,0); // Descomente para resetar a calibração
+        EEPROM.end();
+
+
         dmp_ready = true;
         packet_size = mpu.dmpGetFIFOPacketSize();
     } 
@@ -92,7 +104,7 @@ void setup() {
     // BLE
     NimBLEDevice::init("Contato");
     NimBLEDevice::setSecurityAuth(/*BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM |*/ BLE_SM_PAIR_AUTHREQ_SC);
-    NimBLEDevice::setMTU(24);
+    NimBLEDevice::setMTU(128);
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(&serverCallbacks);
 

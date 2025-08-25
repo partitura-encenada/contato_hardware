@@ -1,0 +1,1 @@
+Teste usando NimBLE para transformar o equipamento em um servidor BLE

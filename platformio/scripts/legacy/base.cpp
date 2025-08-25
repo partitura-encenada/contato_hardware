@@ -11,6 +11,8 @@
 
 #include <esp_now.h>
 #include <WiFi.h>
+#include "../util/util.h"
+
 
 
 // Structure example to receive data
@@ -43,6 +45,7 @@ void setup() {
   Serial.begin(115200);
   //Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
+  Util::PrintMACAddr(); 
   //Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");

@@ -8,7 +8,6 @@
 
 // Constantes e pseudo-constantes
 const int   touch_sensitivity = 20; //20  
-const int   callibration_time = 6; //6  
 
 MPU6050 mpu;
 
@@ -65,7 +64,7 @@ void setup() {
         }
         // EEPROM.writeShort(0,0); // Descomente para resetar a calibração
         EEPROM.end();
-        
+
         dmp_ready = true;
         packet_size = mpu.dmpGetFIFOPacketSize();
     } 

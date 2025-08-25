@@ -41,7 +41,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
          *  Latency: number of intervals allowed to skip.
          *  Timeout: 10 millisecond increments.
          */
-        pServer->updateConnParams(connInfo.getConnHandle(), 6, 8, 0, 180);
+        pServer->updateConnParams(connInfo.getConnHandle(), 30, 40, 2, 100);
     }
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
@@ -104,7 +104,7 @@ void setup() {
     // BLE
     NimBLEDevice::init("Contato");
     NimBLEDevice::setSecurityAuth(/*BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM |*/ BLE_SM_PAIR_AUTHREQ_SC);
-    NimBLEDevice::setMTU(128);
+    NimBLEDevice::setMTU(24);
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(&serverCallbacks);
 

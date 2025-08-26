@@ -14,11 +14,18 @@ uint8_t fifo_buffer[64];
 Quaternion q;           // [w, x, y, z]         quaternion container
 VectorInt16 aa;         // [x, y, z]            accel sensor measurements
 VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-VectorFloat gravity;    
-float ypr[3];
+VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
+VectorFloat gravity;    // [x, y, z]            gravity vector
+float euler[3];         // [psi, theta, phi]    Euler angle container
+float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
 //ESP-NOW Initialization
-uint8_t broadcastAddress[] = {0xf8, 0xb3, 0xb7, 0x2b, 0x09, 0x48};
+uint8_t broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x5d, 0xbc};
+// Base 3: 0xcc, 0xdb, 0xa7, 0x91, 0x47, 0xe8
+// Base 4: 0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c
+// Base 5: 0x40, 0x22, 0xd8, 0x4f, 0x5f, 0xd8
+// Base 6: 0x84, 0xcc, 0xa8, 0x5d, 0x63, 0x90
+// Base 7: 0xcc, 0xdb, 0xa7, 0x91, 0x53, 0x00 
 
 typedef struct struct_message {
     int id; // must be unique for each sender board
@@ -64,11 +71,6 @@ void setup() {
       }
       // EEPROM.writeShort(0,0); // Descomente para resetar a calibração
       EEPROM.end();
-      Serial.println(F("Enabling DMP..."));
-      mpu.setDMPEnabled(true);
-      Serial.println(F("DMP ready! Waiting for first interrupt..."));
-      dmpReady = true;
-      dmpReady = true;
     }
 
   //ESPNOW Initialization
@@ -90,7 +92,6 @@ void setup() {
 
 void loop() {
     message.id = 5; 
-    if (!dmpReady) return;
     if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) { 
       
         mpu.dmpGetQuaternion(&q, fifo_buffer);
@@ -104,7 +105,7 @@ void loop() {
         message.accel = aaReal.x;
         message.touch = 1 ? touchRead(T3) < 30 : 0;
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
-   }
-  delay(10);
+    }
+    delay(10);
 }
 

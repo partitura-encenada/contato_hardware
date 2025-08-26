@@ -68,7 +68,6 @@ void setup() {
       mpu.setDMPEnabled(true);
       Serial.println(F("DMP ready! Waiting for first interrupt..."));
       dmpReady = true;
-      dmpReady = true;
     }
 
   //ESPNOW Initialization

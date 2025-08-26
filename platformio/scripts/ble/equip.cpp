@@ -41,7 +41,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
          *  Latency: number of intervals allowed to skip.
          *  Timeout: 10 millisecond increments.
          */
-        pServer->updateConnParams(connInfo.getConnHandle(), 30, 40, 2, 100);
+        pServer->updateConnParams(connInfo.getConnHandle(), 6, 8, 0, 100);
     }
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
@@ -156,23 +156,5 @@ void loop() {
             }
         }
     }
+    delay(10);
 }
-
-// int touch_read(){
-//   int sum_n = 0;
-//   int n = 50;
-//   for(int i = 0; i < n; i++){
-//     sum_n += touchRead(T3);
-//   }
-//   int avg =  sum_n/n;
-//   if (avg  < 10){
-//     return 1; // normal
-//   }
-//   if (avg < 40){
-//     return 2; // pianissimo
-//   }
-//   else
-//   {
-//     return 0; // off
-//   }
-// }

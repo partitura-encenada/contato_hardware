@@ -2,6 +2,7 @@
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <esp_now.h>
 #include <WiFi.h>
+<<<<<<< HEAD
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     #include "Wire.h"
 #endif
@@ -37,12 +38,33 @@ uint8_t broadcastAddress[] = {0x84, 0xcc, 0xa8, 0x5d, 0x63, 0x90};
 // Base 7: 0xcc, 0xdb, 0xa7, 0x91, 0x53, 0x00 
 
 //Message Struct
+=======
+#include "Wire.h"
+#include <EEPROM.h>
+
+//MPU Initialization
+MPU6050 mpu;
+bool dmpReady = false;  
+uint8_t dev_status;      
+uint16_t fifo_count;    
+uint8_t fifo_buffer[64];
+Quaternion q;           // [w, x, y, z]         quaternion container
+VectorInt16 aa;         // [x, y, z]            accel sensor measurements
+VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
+VectorFloat gravity;    
+float ypr[3];
+
+//ESP-NOW Initialization
+uint8_t broadcastAddress[] = {0xf8, 0xb3, 0xb7, 0x2b, 0x09, 0x48};
+
+>>>>>>> 0e86ae4718a74856566d12b21395ad2cbd86b72a
 typedef struct struct_message {
     int id; // must be unique for each sender board
     int gyro;
     int accel;
     int touch;
 } struct_message;
+<<<<<<< HEAD
 
 struct_message MIDImessage;
 esp_now_peer_info_t peerInfo;
@@ -116,6 +138,52 @@ void setup() {
           Serial.println(F(")"));
       }
 
+=======
+struct_message message;
+esp_now_peer_info_t peerInfo;
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Pacote enviado" : "Falha no envio");
+}
+
+void setup() {
+  Wire.begin();
+  Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+  Serial.begin(115200);
+  Serial.println(F("Initializing I2C devices..."));
+  mpu.initialize();
+  Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+  Serial.println(F("Initializing DMP..."));
+  dev_status = mpu.dmpInitialize();
+
+  if (dev_status == 0) { // Sucesso
+      //  TENTANDO SALVAR OFFSETS MEMORIA PERMANENTE DO ESP XD
+      EEPROM.begin(128);
+      if (EEPROM.readShort(0) == 0)
+      {
+          mpu.CalibrateAccel(6);
+          mpu.CalibrateGyro(6);
+          int16_t* offsets = mpu.GetActiveOffsets();
+          for (int i = 0; i < 6; i++)
+          {
+              EEPROM.writeShort(i*16, offsets[i]);
+          }
+      }
+      else 
+      {   
+          mpu.setZAccelOffset(EEPROM.readShort(2 * 16));
+          mpu.setXGyroOffset(EEPROM.readShort(3 * 16));
+          mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
+          mpu.setZGyroOffset(EEPROM.readShort(5 * 16));
+      }
+      // EEPROM.writeShort(0,0); // Descomente para resetar a calibração
+      EEPROM.end();
+      Serial.println(F("Enabling DMP..."));
+      mpu.setDMPEnabled(true);
+      Serial.println(F("DMP ready! Waiting for first interrupt..."));
+      dmpReady = true;
+      dmpReady = true;
+    }
+>>>>>>> 0e86ae4718a74856566d12b21395ad2cbd86b72a
 
   //ESPNOW Initialization
   WiFi.mode(WIFI_STA);
@@ -124,11 +192,17 @@ void setup() {
     return;
   }
   esp_now_register_send_cb(OnDataSent);
+<<<<<<< HEAD
   // Register peer
   memcpy(peerInfo.peer_addr, broadcastAddress, 6);
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
   // Add peer        
+=======
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+>>>>>>> 0e86ae4718a74856566d12b21395ad2cbd86b72a
   if (esp_now_add_peer(&peerInfo) != ESP_OK){
     Serial.println("Failed to add peer");
     return;
@@ -137,6 +211,7 @@ void setup() {
 
 
 void loop() {
+<<<<<<< HEAD
   
     MIDImessage.id = 6; 
     // if programming failed, don't try to do anything
@@ -145,10 +220,18 @@ void loop() {
     if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) { 
       
         mpu.dmpGetQuaternion(&q, fifoBuffer);
+=======
+    message.id = 5; 
+    if (!dmpReady) return;
+    if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) { 
+      
+        mpu.dmpGetQuaternion(&q, fifo_buffer);
+>>>>>>> 0e86ae4718a74856566d12b21395ad2cbd86b72a
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetAccel(&aa, fifoBuffer);
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetGravity(&gravity, &q);
+<<<<<<< HEAD
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
         ypr_mod = ypr[2] * 180/M_PI;
 
@@ -186,3 +269,15 @@ int touchRead()
       return 0;
     }
 }
+=======
+        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity); 
+    
+        message.gyro = ypr[2] * 180/M_PI;
+        message.accel = aaReal.x;
+        message.touch = 1 ? touchRead(T3) < 30 : 0;
+        esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
+   }
+  delay(10);
+}
+
+>>>>>>> 0e86ae4718a74856566d12b21395ad2cbd86b72a

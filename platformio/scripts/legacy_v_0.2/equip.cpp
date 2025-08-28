@@ -105,14 +105,6 @@ void loop() {
         message.accel = aaReal.x;
         message.touch = 1 ? touchRead(T3) < 20 : 0;
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
-        
-        #ifdef DEBUG
-            Serial.println(
-                String('id falso') + '\t' +
-                String(message.roll) + '\t' +
-                String(message.accel) + '\t' +
-                String(message.touch));
-            //delay(50);
-        #endif
+
     }  
 }

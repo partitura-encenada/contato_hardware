@@ -103,7 +103,7 @@ void loop() {
         // message.pitch = ypr[1] * 180/M_PI;      // -180º >=     pitch   <= +180º
         message.roll =  ypr[2] * 180/M_PI;      // -180º >=     roll    <= +180º
         message.accel = aaReal.x;
-        message.touch = touch();
+        message.touch = 1 ? touchRead(T3) < 20 : 0;
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
         
         #ifdef DEBUG
@@ -116,22 +116,3 @@ void loop() {
         #endif
     }  
 }
-
-int touch(){
-    int sum_n = 0;
-    int n = 10;
-    for(int i = 0; i < n; i++){
-      sum_n += touchRead(T3);
-    }
-    int avg =  sum_n/n;
-    if (avg  < 20){
-      return 1; // normal
-    }
-    if (avg < 60){
-      return 2; // pianissimo
-    }
-    else
-    {
-      return 0; // off
-    }
-  }

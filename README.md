@@ -10,9 +10,13 @@ Código embarcado do aparelho Contato sendo desenvolvido pelo curso de Dança da
 
     ├── scripts # onde é guardado os rascunhos para upload
     
-      ├── ble # rascunhos para conexão BLE
+      ├── ble_equip.cpp # equipamento de conexão ble
+
+      ├── com_port_base.cpp # equipamento base de conexão com porta COM
+
+      ├── com_port_equip.cpp # equipamento de conexão com a base
       
-      └── legacy # rascunhos para conexão tradicional ESP_NOW
+      └── teste.cpp # rascunho para testes de funcionamento do aparelho
       
     └── util # utilidades (arquivos .h) extra para os rascunhos`
     

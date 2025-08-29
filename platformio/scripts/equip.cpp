@@ -11,24 +11,16 @@ bool dmpReady = false;
 uint8_t dev_status;      
 uint16_t fifo_count;    
 uint8_t fifo_buffer[64];
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorInt16 aa;         // [x, y, z]            accel sensor measurements
-VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
-VectorFloat gravity;    // [x, y, z]            gravity vector
-float euler[3];         // [psi, theta, phi]    Euler angle container
-float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+Quaternion q;
+VectorInt16 aa;
+VectorInt16 aaReal;
+VectorFloat gravity;
+float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll continer
 
-//ESP-NOW Initialization
 uint8_t broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x5d, 0xbc};
-// Base 3: 0xcc, 0xdb, 0xa7, 0x91, 0x47, 0xe8
-// Base 4: 0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c
-// Base 5: 0x40, 0x22, 0xd8, 0x4f, 0x5f, 0xd8
-// Base 6: 0x84, 0xcc, 0xa8, 0x5d, 0x63, 0x90
-// Base 7: 0xcc, 0xdb, 0xa7, 0x91, 0x53, 0x00 
 
 typedef struct struct_message {
-    int id; // must be unique for each sender board
+    int id; 
     int gyro;
     int accel;
     int touch;
@@ -50,7 +42,7 @@ void setup() {
   dev_status = mpu.dmpInitialize();
 
   if (dev_status == 0) { // Sucesso
-      //  TENTANDO SALVAR OFFSETS MEMORIA PERMANENTE DO ESP XD
+      //  Usando EEPROM para salvar offsets na memória persistente assim que a célula 0 estiver vazia
       EEPROM.begin(128);
       if (EEPROM.readShort(0) == 0)
       {
@@ -64,6 +56,7 @@ void setup() {
       }
       else 
       {   
+          // Aplicando offsets ao IMU
           mpu.setZAccelOffset(EEPROM.readShort(2 * 16));
           mpu.setXGyroOffset(EEPROM.readShort(3 * 16));
           mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
@@ -73,7 +66,6 @@ void setup() {
       EEPROM.end();
     }
 
-  //ESPNOW Initialization
   WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");

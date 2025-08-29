@@ -11,17 +11,16 @@ bool dmpReady = false;
 uint8_t dev_status;      
 uint16_t fifo_count;    
 uint8_t fifo_buffer[64];
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorInt16 aa;         // [x, y, z]            accel sensor measurements
-VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-VectorFloat gravity;    
-float ypr[3];
+Quaternion q;
+VectorInt16 aa;
+VectorInt16 aaReal;
+VectorFloat gravity;
+float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll continer
 
-//ESP-NOW Initialization
-uint8_t broadcastAddress[] = {0xf8, 0xb3, 0xb7, 0x2b, 0x09, 0x48};
+uint8_t broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x5d, 0xbc};
 
 typedef struct struct_message {
-    int id; // must be unique for each sender board
+    int id; 
     int gyro;
     int accel;
     int touch;
@@ -43,7 +42,7 @@ void setup() {
   dev_status = mpu.dmpInitialize();
 
   if (dev_status == 0) { // Sucesso
-      //  TENTANDO SALVAR OFFSETS MEMORIA PERMANENTE DO ESP XD
+      //  Usando EEPROM para salvar offsets na memória persistente assim que a célula 0 estiver vazia
       EEPROM.begin(128);
       if (EEPROM.readShort(0) == 0)
       {
@@ -57,6 +56,7 @@ void setup() {
       }
       else 
       {   
+          // Aplicando offsets ao IMU
           mpu.setZAccelOffset(EEPROM.readShort(2 * 16));
           mpu.setXGyroOffset(EEPROM.readShort(3 * 16));
           mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
@@ -64,13 +64,8 @@ void setup() {
       }
       // EEPROM.writeShort(0,0); // Descomente para resetar a calibração
       EEPROM.end();
-      Serial.println(F("Enabling DMP..."));
-      mpu.setDMPEnabled(true);
-      Serial.println(F("DMP ready! Waiting for first interrupt..."));
-      dmpReady = true;
     }
 
-  //ESPNOW Initialization
   WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
@@ -89,7 +84,6 @@ void setup() {
 
 void loop() {
     message.id = 5; 
-    if (!dmpReady) return;
     if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) { 
       
         mpu.dmpGetQuaternion(&q, fifo_buffer);
@@ -103,7 +97,7 @@ void loop() {
         message.accel = aaReal.x;
         message.touch = 1 ? touchRead(T3) < 30 : 0;
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
-   }
-  delay(10);
+    }
+    delay(10);
 }
 

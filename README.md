@@ -1,22 +1,23 @@
 # Contato (hardware)
-Código embarcado do aparelho Contato sendo desenvolvido pelo curso de Dança da Universidade Federal do Rio de Janeiro em parceria com o Parque Tecnológico
+[![en](https://img.shields.io/badge/lang-en-red.svg)](https://github.com/partitura-encenada/contato_embarcado/blob/main/README.en.md)
+Código embarcado para o dispositivo Contato sendo desenvolvido pelo curso de Dança da Universidade Federal do Rio de Janeiro em parceria com o Parque Tecnológico. Atualmente o dispositivo se baseia em um módulo ESP32, hoje sendo utilizado um modelo DEVKIT, em conjunto com o [IMU MPU6050 da Invensense] ( https://invensense.tdk.com/products/motion-tracking/6-axis/mpu-6050/ ) para captar dados de giroscópio e acelerômetro em 6 Graus de Liberdade.
 
 # 📁 Organização 
-`contato_hardware/
+contato_hardware/
 
-├── arduino # estrutura de projeto para arduino
+├── arduino # projeto arduino
 
-└── platformio # estrutura de projeto para platformio +
+└── platformio # projeto platform.io +
 
-    ├── scripts # onde é guardado os rascunhos para upload
+    ├── scripts # rascunhos para upload
     
-      ├── ble_equip.cpp # equipamento de conexão ble
+      ├── ble_equip.cpp # conexão BLE
 
-      ├── com_port_base.cpp # equipamento base de conexão com porta COM
+      ├── esp_now_base.cpp # conexão ESP_NOW P2P (Peer comunicando com a máquina via serial)
 
-      ├── com_port_equip.cpp # equipamento de conexão com a base
+      ├── esp_now_equip.cpp # conexão ESP_NOW P2P (Peer comunicando com a "base")
       
-      └── teste.cpp # rascunho para testes de funcionamento do aparelho
+      └── teste.cpp # para testagem e debugging dos aparelhos
       
-    └── util # utilidades (arquivos .h) extra para os rascunhos`
+    └── util # utilidades
     

@@ -1,9 +1,9 @@
 # Contato (hardware)
-[![en](https://img.shields.io/badge/lang-en-red.svg)](https://github.com/partitura-encenada/contato_embarcado/blob/main/README.en.md)
+[![en](https://img.shields.io/badge/lang-en-red.svg)](README.en.md)
 Código embarcado para o dispositivo Contato sendo desenvolvido pelo curso de Dança da Universidade Federal do Rio de Janeiro em parceria com o Parque Tecnológico. Atualmente o dispositivo se baseia em um módulo ESP32, hoje sendo utilizado um modelo DEVKIT, em conjunto com o [IMU MPU6050 da Invensense] ( https://invensense.tdk.com/products/motion-tracking/6-axis/mpu-6050/ ) para captar dados de giroscópio e acelerômetro em 6 Graus de Liberdade.
 
 # 📁 Organização 
-contato_hardware/
+contato_hardware/   
 
 ├── arduino # projeto arduino
 

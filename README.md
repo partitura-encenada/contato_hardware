@@ -7,7 +7,7 @@ contato_hardware/
 
 ├── arduino # projeto arduino
 
-└── platformio # projeto platform.io +
+└── platformio # projeto platform.io
 
     ├── scripts # rascunhos para upload
     

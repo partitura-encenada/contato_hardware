@@ -6,9 +6,6 @@
 #include "../util/util.h"
 #include <EEPROM.h>
 
-// Constantes e pseudo-constantes
-const int   touch_sensitivity = 20; //20  
-
 MPU6050 mpu;
 
 uint8_t     dev_status;      
@@ -29,8 +26,6 @@ float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
 void setup() {
     setCpuFrequencyMhz(80);
     // Inicializar Wire, Serial (caso monitorando) e MPU
-    WiFi.mode(WIFI_STA); // Wi-fi Station
-    Util::PrintMACAddr(); 
     Wire.begin();
     Wire.setClock(400000); // Clock I2C 400khz. Comente caso erro na compilação 
     Serial.begin(115200);
@@ -69,8 +64,8 @@ void setup() {
         packet_size = mpu.dmpGetFIFOPacketSize();
     } 
     else {
-        Serial.print(F("DMP Initialization failed (code ")); // Erro
-        Serial.print(dev_status); // 1 = "initial memory load failed"; 2 = "DMP configuration updates failed"
+        Serial.print(F("DMP Initialization failed (code "));
+        Serial.print(dev_status);
     }
 }
 
@@ -85,11 +80,11 @@ void loop() {
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
         
         Serial.println(
-            String(ypr[0] * 180/M_PI) + '\t' +
-            String(ypr[1] * 180/M_PI) + '\t' +
-            String(ypr[2] * 180/M_PI) + '\t' +
-            String(aaReal.x) + '\t') + 
-            String(touchRead(T3));
+            String(ypr[0] * 180/M_PI) + '\t' + // yaw
+            String(ypr[1] * 180/M_PI) + '\t' + // pitch
+            String(ypr[2] * 180/M_PI) + '\t' + // roll
+            String(aaReal.x) + '\t') + // acelerômetro no eixo x
+            String(touchRead(T3)); // capacitância do pin touch
         delay(10);
     }  
 }

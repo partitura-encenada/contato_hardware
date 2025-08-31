@@ -8,13 +8,12 @@
   The above copyright notice and this permission notice shall be included in all
   copies or substantial portions of the Software.
 *********/
-
 #include <esp_now.h>
 #include <WiFi.h>
 #include "../util/util.h"
 
 typedef struct struct_message {
-    int id; // must be unique for each sender board
+    int id; // Deve ser único para cada remetente
     int gyro;
     int accel;
     int touch;
@@ -31,7 +30,7 @@ void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
+    Serial.println("Erro inicializando ESPNOW");
     return;
   }
   Util::PrintMACAddr();

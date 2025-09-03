@@ -83,8 +83,8 @@ void loop() {
             String(ypr[0] * 180/M_PI) + '\t' + // yaw
             String(ypr[1] * 180/M_PI) + '\t' + // pitch
             String(ypr[2] * 180/M_PI) + '\t' + // roll
-            String(aaReal.x) + '\t') + // acelerômetro no eixo x
-            String(touchRead(T3)); // capacitância do pin touch
+            String(aaReal.x) + '\t' + // acelerômetro no eixo x
+            touchRead(T3)); // capacitância do pin touch
         delay(10);
     }  
 }

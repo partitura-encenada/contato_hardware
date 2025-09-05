@@ -43,12 +43,16 @@ VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
 
-uint8_t broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x5d, 0xbc};
+uint8_t broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
 
 typedef struct struct_message {
     int id; 
-    int gyro;
-    int accel;
+    int yaw;
+    int pitch;
+    int roll;
+    int accel_x;
+    int accel_y;
+    int accel_z;
     int touch;
 } struct_message;
 
@@ -132,8 +136,12 @@ void loop() {
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity); 
     
-        message.gyro = ypr[2] * 180/M_PI;
-        message.accel = aaReal.x;
+        // message.yaw = ypr[0] * 180/M_PI;
+        // message.pitch = ypr[1] * 180/M_PI;
+        message.roll = ypr[2] * 180/M_PI;
+        message.accel_x = aaReal.x;
+        // message.accel_y = aaReal.y;
+        // message.accel_z = aaReal.z;
         message.touch = 1 ? touchRead(T3) < touch_sensitivity : 0;
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
     }

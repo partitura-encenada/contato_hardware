@@ -37,7 +37,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
          *  Args: connection handle, intervalo de conexão mínimo (incremento de 1.25ms), intervalo de conexão máximo (incremento de 1.25ms)
          *  latência (intervalos que podem sofrer skip), timeout (incremento de 10ms).
         */
-        pServer->updateConnParams(connInfo.getConnHandle(), 30, 40, 0, 180);
+        pServer->updateConnParams(connInfo.getConnHandle(), 8, 16, 0, 180);
     }
 
     void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
@@ -86,7 +86,7 @@ void setup() {
             mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
             mpu.setZGyroOffset(EEPROM.readShort(5 * 16));
         }
-        // EEPROM.writeShort(0,0); // Esvazia a célula 0 para reiniciar escrita no EEPROM
+        EEPROM.writeShort(0,0); // Esvazia a célula 0 para reiniciar escrita no EEPROM
         EEPROM.end();
 
 
@@ -100,7 +100,7 @@ void setup() {
     // BLE
     NimBLEDevice::init("Contato");
     NimBLEDevice::setSecurityAuth(/*BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM |*/ BLE_SM_PAIR_AUTHREQ_SC);
-    NimBLEDevice::setMTU(24); // Não sei exatamente o que faz, parece estar associado com o tamanho do pacote enviado
+    NimBLEDevice::setMTU(26); // Não sei exatamente o que faz, parece estar associado com o tamanho do pacote enviado
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(&serverCallbacks);
 
@@ -154,5 +154,4 @@ void loop() {
             }
         }
     }
-    delay(10);
 }

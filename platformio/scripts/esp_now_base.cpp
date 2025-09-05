@@ -14,8 +14,12 @@
 
 typedef struct struct_message {
     int id; // Deve ser único para cada remetente
-    int gyro;
-    int accel;
+    int yaw;
+    int pitch;
+    int roll;
+    int accel_x;
+    int accel_y;
+    int accel_z;
     int touch;
 } struct_message;
 
@@ -23,7 +27,14 @@ struct_message message;
 
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
   memcpy(&message, incomingData, sizeof(message));
-  Serial.println(String(message.id)+'/'+String(message.gyro)+'/'+String(message.accel)+'/'+String(message.touch));
+  Serial.println(String(message.id)+'/'+
+                String(message.yaw)+'/'+
+                String(message.pitch)+'/'+
+                String(message.roll)+'/'+
+                String(message.accel_x)+'/'+
+                String(message.accel_y)+'/'+
+                String(message.accel_z)+'/'+
+                String(message.touch));
 }
  
 void setup() {

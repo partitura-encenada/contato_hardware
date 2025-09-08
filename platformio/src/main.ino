@@ -1,20 +1,35 @@
-// Bibliotecas
-#include "MPU6050_6Axis_MotionApps20.h"
-#include <NimBLEDevice.h>
-#include "Wire.h"
-#include "../util/util.h"
-#include <WiFi.h>
-#include <EEPROM.h>
+/* ============================================
+I2Cdev device library code is placed under the MIT license
+Copyright (c) 2012 Jeff Rowberg
 
-//  https://www.uuidgenerator.net/
-#define SERVICE_UUID "cc5b7017-78da-4891-a348-569271d5f67c"
-#define TOUCH_CHARACTERISTIC_UUID "62c84a29-95d6-44e4-a13d-a9372147ce21"
-#define GYRO_CHARACTERISTIC_UUID "9b7580ed-9fc2-41e7-b7c2-f63de01f0692"
-#define ACCEL_CHARACTERISTIC_UUID "f62094cf-21a7-4f71-bb3f-5a5b17bb134e"
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+===============================================
+*/
+
+#include "MPU6050_6Axis_MotionApps20.h"
+#include <esp_now.h>
+#include <WiFi.h>
+#include "Wire.h"
+#include <EEPROM.h>
 
 const int   touch_sensitivity = 30; //20  
 
-static NimBLEServer* pServer;
 MPU6050 mpu;
 
 uint8_t     dev_status;      
@@ -28,130 +43,115 @@ VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
 
+uint8_t broadcastAddress[] = {0x78, 0xe3, 0x6d, 0xd8, 0x16, 0xd4};
+// Base 3: 0xcc, 0xdb, 0xa7, 0x91, 0x47, 0xe8
+// Base 4: 0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c
+// Base 5: 0x40, 0x22, 0xd8, 0x4f, 0x5f, 0xd8
+// Base 6: 0x84, 0xcc, 0xa8, 0x5d, 0x63, 0x90
+// Base 7: 0xcc, 0xdb, 0xa7, 0x91, 0x6d, 0x9c
+// Base 8: 0xd8, 0xbc, 0x38, 0xe5, 0x3f, 0x8c
+// Base 9: 0x78, 0xe3, 0x6d, 0xd8, 0x16, 0xd4
 
-class ServerCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
-        Serial.printf("Client address: %s\n", connInfo.getAddress().toString().c_str());
+typedef struct struct_message {
+    int id; 
+    int yaw;
+    int pitch;
+    int roll;
+    int accel_x;
+    int accel_y;
+    int accel_z;
+    int touch;
+} struct_message;
 
-        /**
-         *  Args: connection handle, intervalo de conexão mínimo (incremento de 1.25ms), intervalo de conexão máximo (incremento de 1.25ms)
-         *  latência (intervalos que podem sofrer skip), timeout (incremento de 10ms).
-        */
-        pServer->updateConnParams(connInfo.getConnHandle(), 8, 16, 0, 180);
-    }
+struct_message message;
+esp_now_peer_info_t peerInfo;
 
-    void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
-        Serial.printf("Client disconnected - start advertising\n");
-        NimBLEDevice::startAdvertising();
-    }
-
-    void onMTUChange(uint16_t MTU, NimBLEConnInfo& connInfo) override {
-        Serial.printf("MTU updated: %u for connection ID: %u\n", MTU, connInfo.getConnHandle());
-    }
-} serverCallbacks;
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Pacote enviado" : "Falha no envio");
+}
 
 void setup() {
-    // Inicializar Wire, Serial (caso monitorando) e MPU
-    Wire.begin();
-    Wire.setClock(400000); // Clock I2C 400khz. Comente caso erro na compilação 
-    Serial.begin(115200);
-    mpu.initialize();
-    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));  
-    WiFi.mode(WIFI_STA); // Wi-fi Station, apenas para obter endereço MAC
-    Util::PrintMACAddr(); 
-    
-    // DMP
-    dev_status = mpu.dmpInitialize();
-    mpu.setDMPEnabled(true);           
- 
-    if (dev_status == 0) { // Sucesso
-        //  Usando EEPROM para salvar offsets na memória persistente assim que a célula 0 estiver vazia
-        EEPROM.begin(128); // 128 bytes de espaço
-        if (EEPROM.readShort(0) == 0)
-        {
-            // Calibra durante 6 segundos
-            mpu.CalibrateAccel(6);
-            mpu.CalibrateGyro(6);
-            int16_t* offsets = mpu.GetActiveOffsets();
-            for (int i = 0; i < 6; i++)
-            {
-                EEPROM.writeShort(i*16, offsets[i]);
-            }
-        }
-        else 
-        {   
-            // Aplicando offsets ao IMU
-            mpu.setZAccelOffset(EEPROM.readShort(2 * 16));
-            mpu.setXGyroOffset(EEPROM.readShort(3 * 16));
-            mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
-            mpu.setZGyroOffset(EEPROM.readShort(5 * 16));
-        }
-        // EEPROM.writeShort(0,0); // Esvazia a célula 0 para reiniciar escrita no EEPROM
-        EEPROM.end();
+  Wire.begin();
+  Wire.setClock(400000); // 400kHz I2C clock
+  Serial.begin(115200);
+  Serial.println(F("Inicializando dispositivos I2C..."));
+  mpu.initialize();
+  Serial.println(mpu.testConnection() ? F("Conexão com o MPU6050 bem sucedida!") : F("Conexão com o MPU6050 falhou!"));
+  Serial.println(F("Inicializando DMP..."));
+  dev_status = mpu.dmpInitialize();
 
+  if (dev_status == 0) { // Sucesso
+      Serial.println(F("Habilitando DMP..."));
+      mpu.setDMPEnabled(true);
 
-        dmp_ready = true;
-        packet_size = mpu.dmpGetFIFOPacketSize();
-    } 
-    else {
-        Serial.print(F("DMP Initialization failed (code ")); // Erro
+      //  Usando EEPROM para salvar offsets na memória persistente assim que a célula 0 estiver vazia
+      EEPROM.begin(128);
+      if (EEPROM.readShort(0) == 0)
+      {
+          // Calibra durante 6 segundos
+          mpu.CalibrateAccel(6); 
+          mpu.CalibrateGyro(6);
+
+          int16_t* offsets = mpu.GetActiveOffsets();
+          for (int i = 0; i < 6; i++)
+          {
+              EEPROM.writeShort(i*16, offsets[i]);
+          }
+      }
+      else 
+      {   
+          // Aplicando offsets ao IMU
+          mpu.setZAccelOffset(EEPROM.readShort(2 * 16));
+          mpu.setXGyroOffset(EEPROM.readShort(3 * 16));
+          mpu.setYGyroOffset(EEPROM.readShort(4 * 16));
+          mpu.setZGyroOffset(EEPROM.readShort(5 * 16));
+      }
+      // EEPROM.writeShort(0,0); // Esvazia a célula 0 para reiniciar escrita no EEPROM
+      EEPROM.end();
+    }
+  else
+    {
+      Serial.print(F("Inicialização do DMP falhou! (código "));
+      Serial.print(dev_status);
+      Serial.println(F(")"));
     }
 
-    // BLE
-    NimBLEDevice::init("Contato");
-    NimBLEDevice::setSecurityAuth(/*BLE_SM_PAIR_AUTHREQ_BOND | BLE_SM_PAIR_AUTHREQ_MITM |*/ BLE_SM_PAIR_AUTHREQ_SC);
-    NimBLEDevice::setMTU(26); // Não sei exatamente o que faz, parece estar associado com o tamanho do pacote enviado
-    pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(&serverCallbacks);
+  WiFi.mode(WIFI_STA);
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Erro inicializando ESP-NOW");
+    return;
+  }
 
-    NimBLEService* pSensorService = pServer->createService(SERVICE_UUID);
-
-    // Cria características a partir de seus UUID. Ter os UUID "hard-coded" não é uma boa ideia mas é a solução provisória
-    NimBLECharacteristic* pTouchCharacteristic = pSensorService->createCharacteristic(TOUCH_CHARACTERISTIC_UUID, NIMBLE_PROPERTY::NOTIFY);
-    NimBLECharacteristic* pGyroCharacteristic = pSensorService->createCharacteristic(GYRO_CHARACTERISTIC_UUID, NIMBLE_PROPERTY::NOTIFY);
-    NimBLECharacteristic* pAccelCharacteristic = pSensorService->createCharacteristic(ACCEL_CHARACTERISTIC_UUID, NIMBLE_PROPERTY::NOTIFY);
-    NimBLE2904* pGyro2904 = pGyroCharacteristic->create2904();
-    pGyro2904->setFormat(NimBLE2904::FORMAT_SINT16);
-    pSensorService->start();
-
-    /** Anuncia a conexão */
-    NimBLEAdvertising* pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->setName("Contato");
-    pAdvertising->addServiceUUID(pSensorService->getUUID());
-    pAdvertising->enableScanResponse(false);
-    pAdvertising->start();
-    Serial.printf("Anunciando:\n");
+  esp_now_register_send_cb(OnDataSent);
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Falha em adicionar peer");
+    return;
+  }
 }
-    
+
+
 void loop() {
-    if (!dmp_ready) return;
-    if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)){ 
+    message.id = 9;  // NAO É ASSIM QUE SE IDENTIFICA DISPOSITIVOS
+    if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) { 
         mpu.dmpGetQuaternion(&q, fifo_buffer);
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetAccel(&aa, fifo_buffer);
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-        
-        if (pServer->getConnectedCount()) {
-            NimBLEService* pSvc = pServer->getServiceByUUID(SERVICE_UUID);
-            if (pSvc) {
-                NimBLECharacteristic* pTouchChr = pSvc->getCharacteristic(TOUCH_CHARACTERISTIC_UUID);
-                NimBLECharacteristic* pGyroChr = pSvc->getCharacteristic(GYRO_CHARACTERISTIC_UUID);                
-                NimBLECharacteristic* pAccelChr = pSvc->getCharacteristic(ACCEL_CHARACTERISTIC_UUID);                
-                if (pTouchChr) {
-                    pTouchChr->setValue(1 ? touchRead(T3) < touch_sensitivity : 0);
-                    pTouchChr->notify();
-                }
-                if (pGyroChr) {
-                    pGyroChr->setValue((int)(ypr[2] * 180/M_PI));
-                    pGyroChr->notify();
-                }
-                if (pAccelChr) {
-                    pAccelChr->setValue((int)aaReal.x);
-                    pAccelChr->notify();
-                }
-            }
-        }
+        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity); 
+    
+        // message.yaw = ypr[0] * 180/M_PI;
+        // message.pitch = ypr[1] * 180/M_PI;
+        message.roll = ypr[2] * 180/M_PI;
+        message.accel_x = aaReal.x;
+        // message.accel_y = aaReal.y;
+        // message.accel_z = aaReal.z;
+        message.touch = 1 ? touchRead(T3) < touch_sensitivity : 0;
+        esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
     }
+    delay(10);
 }
+

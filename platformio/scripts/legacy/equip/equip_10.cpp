@@ -6,7 +6,7 @@
 
 // Constantes e pseudo-constantes
 #define DEBUG
-#define AUTO_CALLIBRATION
+// #define AUTO_CALLIBRATION
 const int   touch_sensitivity = 20; //20  
 const int   callibration_time = 6; //6  
 
@@ -22,10 +22,10 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x47, 0xe8};
+uint8_t     broadcastAddress[] = {0xf8, 0xb3, 0xb7, 0x2b, 0x05, 0x6c};
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
-    int id = 3;
+    int id = 10;
     int roll;
     int accel;
     int touch;
@@ -54,10 +54,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1982);
-        mpu.setXGyroOffset(-2);    
-        mpu.setYGyroOffset(23);    
-        mpu.setZGyroOffset(-36);   
+        mpu.setZAccelOffset(1426);
+        mpu.setXGyroOffset(60);    
+        mpu.setYGyroOffset(10);    
+        mpu.setZGyroOffset(-76);   
     #endif
  
     if (dev_status == 0) { // Sucesso

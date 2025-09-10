@@ -6,7 +6,7 @@
 
 // Constantes e pseudo-constantes
 #define DEBUG
-#define AUTO_CALLIBRATION
+// #define AUTO_CALLIBRATION
 const int   touch_sensitivity = 20; //20  
 const int   callibration_time = 6; //6  
 
@@ -54,10 +54,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(348); 
-        mpu.setXGyroOffset(29);    
-        mpu.setYGyroOffset(76);     
-        mpu.setZGyroOffset(-85);    
+        mpu.setZAccelOffset(1316);
+        mpu.setXGyroOffset(47);    
+        mpu.setYGyroOffset(-12);    
+        mpu.setZGyroOffset(-7);  
     #endif
  
     if (dev_status == 0) { // Sucesso

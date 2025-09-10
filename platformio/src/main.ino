@@ -43,7 +43,7 @@ VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
 
-uint8_t broadcastAddress[] = {0x40, 0x22, 0xd8, 0x4f, 0x5f, 0xd8};
+uint8_t broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x56, 0xd8};
 // Base 3: 0xcc, 0xdb, 0xa7, 0x91, 0x47, 0xe8
 // Base 4: 0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c
 // Base 5: 0x40, 0x22, 0xd8, 0x4f, 0x5f, 0xd8
@@ -134,7 +134,7 @@ void setup() {
 
 
 void loop() {
-    message.id = 5;  // NAO É ASSIM QUE SE IDENTIFICA DISPOSITIVOS --- ta bravo é?
+    message.id = 5;  // NAO É ASSIM QUE SE IDENTIFICA DISPOSITIVOS
     if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) { 
         mpu.dmpGetQuaternion(&q, fifo_buffer);
         mpu.dmpGetGravity(&gravity, &q);
@@ -143,12 +143,12 @@ void loop() {
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity); 
     
-        // message.yaw = ypr[0] * 180/M_PI;
-        // message.pitch = ypr[1] * 180/M_PI;
+        message.yaw = ypr[0] * 180/M_PI;
+        message.pitch = ypr[1] * 180/M_PI;
         message.roll = ypr[2] * 180/M_PI;
         message.accel_x = aaReal.x;
-        // message.accel_y = aaReal.y;
-        // message.accel_z = aaReal.z;
+        message.accel_y = aaReal.y;
+        message.accel_z = aaReal.z;
         message.touch = 1 ? touchRead(T3) < touch_sensitivity : 0;
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
     }

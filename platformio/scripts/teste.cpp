@@ -19,13 +19,7 @@ VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
 
-// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) { // Função callback de envio
-
-// }
-
 void setup() {
-    setCpuFrequencyMhz(80);
-    // Inicializar Wire, Serial (caso monitorando) e MPU
     Wire.begin();
     Wire.setClock(400000); // Clock I2C 400khz. Comente caso erro na compilação 
     Serial.begin(115200);

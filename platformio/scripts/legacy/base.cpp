@@ -12,7 +12,6 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-
 // Structure example to receive data
 // Must match the sender structure
 typedef struct struct_message {
@@ -22,12 +21,8 @@ typedef struct struct_message {
     int touch;
 } struct_message;
 
-
-
-
 // Create a struct_message called myData
 struct_message MIDImessage;
-
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
@@ -41,8 +36,11 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
 void setup() {
   //Initialize Serial Monitor
   Serial.begin(115200);
-  //Set device as a Wi-Fi Station
+  
+  //Set device as a Wi-Fi Station and set fixed channel
   WiFi.mode(WIFI_STA);
+  WiFi.channel(5);  // Para canal fixo 
+  
   //Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");

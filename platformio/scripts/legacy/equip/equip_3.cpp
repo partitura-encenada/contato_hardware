@@ -76,13 +76,14 @@ void setup() {
 
     // ESP_NOW
     WiFi.mode(WIFI_STA);
+    WiFi.channel(5);  // Para canal fixo
     if (esp_now_init() != ESP_OK) {
         Serial.println("Error initializing ESP-NOW");
         return;
     }
     // esp_now_register_send_cb(OnDataSent); // Registro função callback de envio 
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;  
+    peerInfo.channel = 1;  // <-- ALTERE PARA 1 (canal fixo)
     peerInfo.encrypt = false;       
     if (esp_now_add_peer(&peerInfo) != ESP_OK){
         Serial.println("Failed to add peer");

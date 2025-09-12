@@ -76,6 +76,7 @@ void setup() {
 
     // ESP_NOW
     WiFi.mode(WIFI_STA);
+    WiFi.channel(5);  // Para canal fixo
     if (esp_now_init() != ESP_OK) {
         Serial.println("Error initializing ESP-NOW");
         return;

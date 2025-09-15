@@ -3,12 +3,14 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include "Wire.h"
+#include "esp_wifi.h" 
 
 // Constantes e pseudo-constantes
 #define DEBUG
 // #define AUTO_CALLIBRATION
-const int   touch_sensitivity = 20; //20  
+const int   touch_sensitivity = 30; //20  
 const int   callibration_time = 6; //6  
+const int   CANAL_ESPECIFICO = 1;
 
 MPU6050 mpu;
 
@@ -54,10 +56,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1316);
-        mpu.setXGyroOffset(47);    
-        mpu.setYGyroOffset(-12);    
-        mpu.setZGyroOffset(-7);  
+        mpu.setZAccelOffset(1646);
+        mpu.setXGyroOffset(13);    
+        mpu.setYGyroOffset(-71);    
+        mpu.setZGyroOffset(-3);
     #endif
  
     if (dev_status == 0) { // Sucesso
@@ -76,14 +78,16 @@ void setup() {
 
     // ESP_NOW
     WiFi.mode(WIFI_STA);
-    WiFi.channel(5);  // Para canal fixo
+    esp_wifi_set_max_tx_power(82);
+    WiFi.channel(CANAL_ESPECIFICO); // Para canal fixo
     if (esp_now_init() != ESP_OK) {
         Serial.println("Error initializing ESP-NOW");
         return;
     }
+    
     // esp_now_register_send_cb(OnDataSent); // Registro função callback de envio 
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;  
+    peerInfo.channel = CANAL_ESPECIFICO;  
     peerInfo.encrypt = false;       
     if (esp_now_add_peer(&peerInfo) != ESP_OK){
         Serial.println("Failed to add peer");
@@ -104,7 +108,7 @@ void loop() {
         // message.pitch = ypr[1] * 180/M_PI;      // -180º >=     pitch   <= +180º
         message.roll =  ypr[2] * 180/M_PI;      // -180º >=     roll    <= +180º
         message.accel = aaReal.x;
-        message.touch = 1 ? touchRead(T3) < 20 : 0;
+        message.touch = (touchRead(T3) < 30) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
 
     }  

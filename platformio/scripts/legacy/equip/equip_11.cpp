@@ -7,7 +7,7 @@
 // Constantes e pseudo-constantes
 #define DEBUG
 // #define AUTO_CALLIBRATION
-const int   touch_sensitivity = 20; //20  
+const int   touch_sensitivity = 30; //20  
 const int   callibration_time = 6; //6  
 
 MPU6050 mpu;

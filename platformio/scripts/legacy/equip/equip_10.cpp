@@ -54,10 +54,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1426);
-        mpu.setXGyroOffset(60);    
-        mpu.setYGyroOffset(10);    
-        mpu.setZGyroOffset(-76);   
+        mpu.setZAccelOffset(1316);
+        mpu.setXGyroOffset(47);    
+        mpu.setYGyroOffset(-12);    
+        mpu.setZGyroOffset(-7);   
     #endif
  
     if (dev_status == 0) { // Sucesso

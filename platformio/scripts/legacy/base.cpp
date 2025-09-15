@@ -11,6 +11,7 @@
 
 #include <esp_now.h>
 #include <WiFi.h>
+#include "esp_wifi.h" 
 
 // Structure example to receive data
 // Must match the sender structure
@@ -26,20 +27,27 @@ struct_message MIDImessage;
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
+
+// ADICIONADO: Filtro por MAC - só aceita do transmissor específico
+  uint8_t macTransmissor[] = {0xcc, 0xdb, 0xa7, 0x91, 0x4d, 0x7c}; // ALTERE para o MAC do seu transmissor
+  if(memcmp(mac_addr, macTransmissor, 6) != 0) {
+    return; // Ignora dados de outros transmissores
+  }
   
   char macStr[18];
   memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
   Serial.println(String(MIDImessage.id)+'/'+String(MIDImessage.gyro)+'/'+String(MIDImessage.accel)+'/'+String(MIDImessage.touch));
  
 }
- 
+
 void setup() {
   //Initialize Serial Monitor
   Serial.begin(115200);
   
   //Set device as a Wi-Fi Station and set fixed channel
   WiFi.mode(WIFI_STA);
-  WiFi.channel(5);  // Para canal fixo 
+  esp_wifi_set_max_tx_power(82);
+  WiFi.channel(1);  // Para canal fixo 
   
   //Init ESP-NOW
   if (esp_now_init() != ESP_OK) {

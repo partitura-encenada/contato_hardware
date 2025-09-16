@@ -8,8 +8,8 @@
 // Constantes e pseudo-constantes
 #define DEBUG
 // #define AUTO_CALLIBRATION
-const int   touch_sensitivity = 30; //20  
-const int   callibration_time = 6; //6  
+const int   touch_sensitivity = 20;  
+const int   callibration_time = 6; 
 const int   CANAL_ESPECIFICO = 1;
 
 MPU6050 mpu;
@@ -39,6 +39,23 @@ esp_now_peer_info_t peerInfo;
 
 // }
 
+// Função para definir o canal
+esp_err_t setChannel(int channel) {
+  esp_wifi_set_promiscuous(true);  
+  esp_err_t result = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);
+
+  #ifdef DEBUG
+    uint8_t primaryChan;
+    wifi_second_chan_t secondChan;
+    esp_wifi_get_channel(&primaryChan, &secondChan);
+    Serial.print("Canal real configurado: ");
+    Serial.println(primaryChan);
+  #endif
+
+  return result;
+}
+
 void setup() {
     setCpuFrequencyMhz(80);
     // Inicializar Wire, Serial (caso monitorando) e MPU
@@ -50,7 +67,7 @@ void setup() {
     mpu.initialize();
     #ifdef DEBUG
         Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));  
-    #endif    
+    #endif  
 
     // DMP
     dev_status = mpu.dmpInitialize();
@@ -59,7 +76,7 @@ void setup() {
         mpu.setZAccelOffset(1982);
         mpu.setXGyroOffset(-2);    
         mpu.setYGyroOffset(23);    
-        mpu.setZGyroOffset(-36);   
+        mpu.setZGyroOffset(-36);  
     #endif
  
     if (dev_status == 0) { // Sucesso
@@ -76,23 +93,32 @@ void setup() {
         Serial.print(dev_status); // 1 = "initial memory load failed"; 2 = "DMP configuration updates failed"
     }
 
-    // ESP_NOW
-    WiFi.mode(WIFI_STA);
+    // CONFIGURA WI-FI NO CANAL ESPECÍFICO
+    WiFi.mode(WIFI_STA);           
+    setChannel(CANAL_ESPECIFICO);
     esp_wifi_set_max_tx_power(82);
-    WiFi.channel(CANAL_ESPECIFICO); // Para canal fixo
+
+    Serial.print("MAC deste dispositivo: ");
+    Serial.println(WiFi.macAddress());
+
+    // Inicia o ESP-NOW
     if (esp_now_init() != ESP_OK) {
         Serial.println("Error initializing ESP-NOW");
         return;
     }
     
+    // Configuração do peer
+    esp_now_peer_info_t peerInfo = {};
     // esp_now_register_send_cb(OnDataSent); // Registro função callback de envio 
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = CANAL_ESPECIFICO;  
-    peerInfo.encrypt = false;       
+    peerInfo.channel = 0;      // usa o canal já configurado no Wi-Fi
+    peerInfo.encrypt = false;    
     if (esp_now_add_peer(&peerInfo) != ESP_OK){
         Serial.println("Failed to add peer");
         return;
     }
+
+    // Serial.println("Peer adicionado e ESP-NOW pronto!");
 }
 
 void loop() {
@@ -108,8 +134,15 @@ void loop() {
         // message.pitch = ypr[1] * 180/M_PI;      // -180º >=     pitch   <= +180º
         message.roll =  ypr[2] * 180/M_PI;      // -180º >=     roll    <= +180º
         message.accel = aaReal.x;
-        message.touch = (touchRead(T3) < 30) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
+        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
+
+        // #ifdef DEBUG
+        //     Serial.print("Touch raw value: ");
+        //     Serial.println(touchRead(T3));
+        // #endif
+
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
 
+        delay(20);
     }  
 }

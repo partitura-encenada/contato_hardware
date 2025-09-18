@@ -1,4 +1,3 @@
-
 #include <esp_now.h>
 #include <WiFi.h>
 #include "esp_wifi.h"
@@ -13,38 +12,16 @@ typedef struct struct_message {
 
 struct_message MIDImessage;
 
-// Controle de tempo para evitar prints muito rápidos
-unsigned long ultimoPrint = 0;
-const unsigned long intervaloPrint = 10; //ms entre prints
-
 // Callback de recepção
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
   // MAC do transmissor esperado
-  uint8_t macTransmissor[] = {0x94, 0x54, 0xc5, 0x6f, 0xa9, 0xa8}; //MAC usado no transmissor
-
-// {0xf8, 0xb3, 0xb7, 0x50, 0xcc, 0xec} Contato003
-// {0xcc, 0xdb, 0xa7, 0xa0, 0x08, 0x84} Contato004
-// {0x3c, 0x8a, 0x1f, 0x80, 0x76, 0xa4} Contato005
-// {0x94, 0x54, 0xc5, 0x6f, 0xa9, 0xa8} Contato006
-// {0x3c, 0x8a, 0x1f, 0xa3, 0x52, 0x18} Contato007
-// {0xf8, 0xb3, 0xb7, 0x2b, 0x09, 0x48} Contato008
-// {0xcc, 0xdb, 0xa7, 0x91, 0x4d, 0x7c} Contato009
+  uint8_t macTransmissor[] = {0xcc, 0xdb, 0xa7, 0x91, 0x4d, 0x7c}; //MAC usado no transmissor
 
   if (memcmp(mac_addr, macTransmissor, 6) != 0) {
     return; // Ignora pacotes de outros dispositivos
   }
-
-  unsigned long tempoAtual = millis();
-  if (tempoAtual - ultimoPrint >= intervaloPrint) {
-    memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
-    Serial.println(String(MIDImessage.id) + "/" +
-                   String(MIDImessage.gyro) + "/" +
-                   String(MIDImessage.accel) + "/" +
-                   String(MIDImessage.touch));
-    ultimoPrint = tempoAtual;
-  }
 }
-
+ 
 void setup() {
   Serial.begin(115200);
 
@@ -54,7 +31,7 @@ void setup() {
 
   //Fixa o canal no mesmo do transmissor
   esp_wifi_set_promiscuous(true);
-  esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE); // Canal do transmissor
+  esp_wifi_set_channel(10, WIFI_SECOND_CHAN_NONE); // Canal do transmissor
   esp_wifi_set_promiscuous(false);
 
   // Confirma canal em uso

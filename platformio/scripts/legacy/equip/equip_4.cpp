@@ -8,8 +8,8 @@
 // Constantes e pseudo-constantes
 #define DEBUG
 // #define AUTO_CALLIBRATION
-const int   touch_sensitivity = 20;
-const int   callibration_time = 6;
+const int   touch_sensitivity = 20;  
+const int   callibration_time = 6; 
 const int   CANAL_ESPECIFICO = 5;
 
 MPU6050 mpu;
@@ -26,8 +26,8 @@ bool        dmp_ready = false;
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
 uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
 
-typedef struct { // Struct da mensagem, deve ser igual ao da base
-    int id = 4;
+typedef struct { // Struct da mensagem, deve ser igual ao da base 
+    int id = 3;
     int roll;
     int accel;
     int touch;

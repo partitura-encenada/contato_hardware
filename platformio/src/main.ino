@@ -5,14 +5,19 @@
 #include "Wire.h"
 #include "esp_wifi.h" 
 
+
+// Se quiser limitar a frequência de envio, descomente a linha abaixo
+#define FREQ_ENVIO 20 
+
 // Constantes e pseudo-constantes
 #define DEBUG
 // #define AUTO_CALLIBRATION
-const int   touch_sensitivity = 20;  
-const int   callibration_time = 6; 
-const int   CANAL_ESPECIFICO = 1;
+const int   touch_sensitivity = 30;
+const int   callibration_time = 6;
+const int   CANAL_ESPECIFICO = 5;
 
 MPU6050 mpu;
+
 
 uint8_t     dev_status;      
 uint16_t    packet_size;   
@@ -23,11 +28,11 @@ VectorInt16 aa;             // [x, y, z]            Accel
 VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
-float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x47, 0xe8};
+float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll        
+uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
-    int id = 3;
+    int id = 4;
     int roll;
     int accel;
     int touch;
@@ -38,6 +43,11 @@ esp_now_peer_info_t peerInfo;
 // void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) { // Função callback de envio
 
 // }
+
+#ifdef FREQ_ENVIO
+  const unsigned long intervaloEnvio = 1000 / FREQ_ENVIO;
+  unsigned long ultimoEnvio = 0;
+#endif
 
 // Função para definir o canal
 esp_err_t setChannel(int channel) {
@@ -58,9 +68,9 @@ esp_err_t setChannel(int channel) {
 
 void setup() {
     setCpuFrequencyMhz(80);
-    // Inicializar Wire, Serial (caso monitorando) e MPU
+
     Wire.begin();
-    Wire.setClock(400000); // Clock I2C 400khz. Comente caso erro na compilação 
+    Wire.setClock(400000); 
     #ifdef DEBUG
         Serial.begin(115200);
     #endif
@@ -69,17 +79,16 @@ void setup() {
         Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));  
     #endif  
 
-    // DMP
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1982);
-        mpu.setXGyroOffset(-2);    
-        mpu.setYGyroOffset(23);    
-        mpu.setZGyroOffset(-36);  
+        mpu.setZAccelOffset(1794); 
+        mpu.setXGyroOffset(44);    
+        mpu.setYGyroOffset(2);     
+        mpu.setZGyroOffset(-3);    
     #endif
  
-    if (dev_status == 0) { // Sucesso
+    if (dev_status == 0) {
         #ifdef AUTO_CALLIBRATION
             mpu.CalibrateAccel(callibration_time);
             mpu.CalibrateGyro(callibration_time);
@@ -105,7 +114,7 @@ void setup() {
     if (esp_now_init() != ESP_OK) {
         Serial.println("Error initializing ESP-NOW");
         return;
-    }
+    }  
     
     // Configuração do peer
     esp_now_peer_info_t peerInfo = {};
@@ -122,7 +131,7 @@ void setup() {
 }
 
 void loop() {
-    if (!dmp_ready) return;
+ if (!dmp_ready) return;
     if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) { 
         mpu.dmpGetQuaternion(&q, fifo_buffer);
         mpu.dmpGetGravity(&gravity, &q);
@@ -141,8 +150,15 @@ void loop() {
         //     Serial.println(touchRead(T3));
         // #endif
 
-        esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
-
-        delay(20);
+        #ifdef FREQ_ENVIO
+          unsigned long agora = millis();
+          if (agora - ultimoEnvio >= intervaloEnvio) {
+              ultimoEnvio = agora;
+              esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
+          }
+        #else
+          // Sem filtro → envia sempre
+          esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
+        #endif
     }  
 }

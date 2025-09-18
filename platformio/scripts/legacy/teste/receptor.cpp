@@ -22,7 +22,7 @@ const unsigned long intervaloPrint = 20; // 20ms entre prints
 // Callback de recepção
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
   // MAC do transmissor esperado
-  uint8_t macTransmissor[] = {0xcc, 0xdb, 0xa7, 0xa0, 0x08, 0x84}; 
+  uint8_t macTransmissor[] = {0xcc, 0xdb, 0xa7, 0xa0, 0x08, 0x84}; // 0xcc, 0xdb, 0xa7, 0x92, 0x16, 0xa4 teste 
 
   if (memcmp(mac_addr, macTransmissor, 6) != 0) return;
 

@@ -5,6 +5,10 @@
 #include "Wire.h"
 #include "esp_wifi.h" 
 
+
+// Se quiser limitar a frequência de envio, descomente a linha abaixo
+#define FREQ_ENVIO 20 
+
 // Constantes e pseudo-constantes
 #define DEBUG
 // #define AUTO_CALLIBRATION
@@ -14,29 +18,36 @@ const int   CANAL_ESPECIFICO = 5;
 
 MPU6050 mpu;
 
+
 uint8_t     dev_status;      
 uint16_t    packet_size;   
 uint16_t    fifo_count;    
 uint8_t     fifo_buffer[64];
-Quaternion  q;              
-VectorInt16 aa;             
-VectorInt16 aaReal;         
-VectorFloat gravity;        
+Quaternion  q;              // [w, x, y, z]         Quaternion 
+VectorInt16 aa;             // [x, y, z]            Accel
+VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
+VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
-float       ypr[3];          
+float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll        
 uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
 
-typedef struct { 
+typedef struct { // Struct da mensagem, deve ser igual ao da base 
     int id = 4;
-    int roll;       // roll em graus
-    float accel;    // aceleração total em m/s²
-    int touch;      // estado do touch
-    float gyroX;    // giroscópio X em rad/s
-    float gyroY;    // giroscópio Y em rad/s
-    float gyroZ;    // giroscópio Z em rad/s
+    int roll;
+    int accel;
+    int touch;
 } message_t;
 message_t message;
 esp_now_peer_info_t peerInfo;
+
+// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) { // Função callback de envio
+
+// }
+
+#ifdef FREQ_ENVIO
+  const unsigned long intervaloEnvio = 1000 / FREQ_ENVIO;
+  unsigned long ultimoEnvio = 0;
+#endif
 
 // Função para definir o canal
 esp_err_t setChannel(int channel) {
@@ -57,6 +68,7 @@ esp_err_t setChannel(int channel) {
 
 void setup() {
     setCpuFrequencyMhz(80);
+
     Wire.begin();
     Wire.setClock(400000); 
     #ifdef DEBUG
@@ -67,7 +79,6 @@ void setup() {
         Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));  
     #endif  
 
-    // DMP
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
@@ -77,7 +88,7 @@ void setup() {
         mpu.setZGyroOffset(-3);    
     #endif
  
-    if (dev_status == 0) { 
+    if (dev_status == 0) {
         #ifdef AUTO_CALLIBRATION
             mpu.CalibrateAccel(callibration_time);
             mpu.CalibrateGyro(callibration_time);
@@ -87,11 +98,11 @@ void setup() {
         packet_size = mpu.dmpGetFIFOPacketSize();
     } 
     else {
-        Serial.print(F("DMP Initialization failed (code ")); 
-        Serial.print(dev_status); 
+        Serial.print(F("DMP Initialization failed (code ")); // Erro
+        Serial.print(dev_status); // 1 = "initial memory load failed"; 2 = "DMP configuration updates failed"
     }
 
-    // Configura Wi-Fi e ESP-NOW
+    // CONFIGURA WI-FI NO CANAL ESPECÍFICO
     WiFi.mode(WIFI_STA);           
     setChannel(CANAL_ESPECIFICO);
     esp_wifi_set_max_tx_power(82);
@@ -99,24 +110,28 @@ void setup() {
     Serial.print("MAC deste dispositivo: ");
     Serial.println(WiFi.macAddress());
 
+    // Inicia o ESP-NOW
     if (esp_now_init() != ESP_OK) {
         Serial.println("Error initializing ESP-NOW");
         return;
-    }
+    }  
     
+    // Configuração do peer
     esp_now_peer_info_t peerInfo = {};
+    // esp_now_register_send_cb(OnDataSent); // Registro função callback de envio 
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;     
+    peerInfo.channel = 0;      // usa o canal já configurado no Wi-Fi
     peerInfo.encrypt = false;    
     if (esp_now_add_peer(&peerInfo) != ESP_OK){
         Serial.println("Failed to add peer");
         return;
     }
+
+    // Serial.println("Peer adicionado e ESP-NOW pronto!");
 }
 
 void loop() {
-    if (!dmp_ready) return;
-
+ if (!dmp_ready) return;
     if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) { 
         mpu.dmpGetQuaternion(&q, fifo_buffer);
         mpu.dmpGetGravity(&gravity, &q);
@@ -124,38 +139,26 @@ void loop() {
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetGravity(&gravity, &q);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+        // message.yaw =   ypr[0] * 180/M_PI;      // -180º >=     yaw     <= +180º
+        // message.pitch = ypr[1] * 180/M_PI;      // -180º >=     pitch   <= +180º
+        message.roll =  ypr[2] * 180/M_PI;      // -180º >=     roll    <= +180º
+        message.accel = aaReal.x;
+        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
 
-        // Roll em graus
-        message.roll =  ypr[2] * 180/M_PI;
+        // #ifdef DEBUG
+        //     Serial.print("Touch raw value: ");
+        //     Serial.println(touchRead(T3));
+        // #endif
 
-        // Conversão LSB → m/s² para cada eixo
-        float ax = (aaReal.x / 16384.0) * 9.80665;
-        float ay = (aaReal.y / 16384.0) * 9.80665;
-        float az = (aaReal.z / 16384.0) * 9.80665;
-
-        // Aceleração total (magnitude do vetor)
-        message.accel = sqrt(ax*ax + ay*ay + az*az);
-
-        // Touch
-        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
-
-        // Giroscópio em rad/s
-        message.gyroX = (aa.x / 131.0) * PI / 180.0;
-        message.gyroY = (aa.y / 131.0) * PI / 180.0;
-        message.gyroZ = (aa.z / 131.0) * PI / 180.0;
-
-        // Debug serial
-        #ifdef DEBUG
-            Serial.print("Touch raw: "); Serial.print(touchRead(T3));
-            Serial.print(" | Accel total (m/s²): "); Serial.print(message.accel);
-            Serial.print(" | Gyro X: "); Serial.print(message.gyroX);
-            Serial.print(" Y: "); Serial.print(message.gyroY);
-            Serial.print(" Z: "); Serial.println(message.gyroZ);
+        #ifdef FREQ_ENVIO
+          unsigned long agora = millis();
+          if (agora - ultimoEnvio >= intervaloEnvio) {
+              ultimoEnvio = agora;
+              esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
+          }
+        #else
+          // Sem filtro → envia sempre
+          esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
         #endif
-
-        // Envia a mensagem via ESP-NOW
-        esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
-
-        delay(20);
     }  
 }

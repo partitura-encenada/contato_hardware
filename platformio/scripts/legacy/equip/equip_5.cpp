@@ -28,10 +28,10 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
+uint8_t     broadcastAddress[] = {0x40, 0x22, 0xd8, 0x4f, 0x5f, 0xd8};
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
-    int id = 4;
+    int id = 5;
     int roll;
     int accel;
     int touch;

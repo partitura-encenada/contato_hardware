@@ -14,7 +14,7 @@
 const int   delay_time = 10;
 const int   touch_sensitivity = 20;  
 const int   callibration_time = 6;  
-const int   CANAL_ESPECIFICO = 10;
+const int   CANAL_ESPECIFICO = 8;
 
 MPU6050 mpu;
 
@@ -28,10 +28,10 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
+uint8_t     broadcastAddress[] = {0xd8, 0xbc, 0x38, 0xe5, 0x3f, 0x8c};
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
-    int id = 4;
+    int id = 8;
     int roll;
     int accel;
     int touch;
@@ -74,10 +74,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1718);
-        mpu.setXGyroOffset(-30);    
-        mpu.setYGyroOffset(-20);    
-        mpu.setZGyroOffset(19);    
+        mpu.setZAccelOffset(1316);
+        mpu.setXGyroOffset(29);    
+        mpu.setYGyroOffset(-1);    
+        mpu.setZGyroOffset(10);   
     #endif
  
     if (dev_status == 0) { // Sucesso
@@ -93,6 +93,7 @@ void setup() {
         Serial.print(F("DMP Initialization failed (code ")); // Erro
         Serial.print(dev_status); // 1 = "initial memory load failed"; 2 = "DMP configuration updates failed"
     }
+
 
     // CONFIGURA WI-FI NO CANAL ESPECÍFICO
     WiFi.mode(WIFI_STA);           

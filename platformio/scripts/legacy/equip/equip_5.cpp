@@ -5,9 +5,13 @@
 #include "Wire.h"
 #include "esp_wifi.h" 
 
-// Constantes e pseudo-constantes
+
+#define USE_DELAY   // Comente esta linha para desativar o delay
 #define DEBUG
 // #define AUTO_CALLIBRATION
+
+// Constantes e pseudo-constantes
+const int   delay_time = 10;
 const int   touch_sensitivity = 20;  
 const int   callibration_time = 6; 
 const int   CANAL_ESPECIFICO = 3;
@@ -24,10 +28,10 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0x40, 0x22, 0xd8, 0x4f, 0x5f, 0xd8};
+uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
-    int id = 5;
+    int id = 4;
     int roll;
     int accel;
     int touch;
@@ -35,9 +39,6 @@ typedef struct { // Struct da mensagem, deve ser igual ao da base
 message_t message;
 esp_now_peer_info_t peerInfo;
 
-// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) { // Função callback de envio
-
-// }
 
 // Função para definir o canal
 esp_err_t setChannel(int channel) {
@@ -49,7 +50,7 @@ esp_err_t setChannel(int channel) {
     uint8_t primaryChan;
     wifi_second_chan_t secondChan;
     esp_wifi_get_channel(&primaryChan, &secondChan);
-    Serial.print("Canal real configurado: ");
+    Serial.print("Canal configurado: ");
     Serial.println(primaryChan);
   #endif
 
@@ -93,13 +94,21 @@ void setup() {
         Serial.print(dev_status); // 1 = "initial memory load failed"; 2 = "DMP configuration updates failed"
     }
 
-    // CONFIGURA WI-FI NO CANAL ESPECÍFICO
+// CONFIGURA WI-FI NO CANAL ESPECÍFICO
     WiFi.mode(WIFI_STA);           
     setChannel(CANAL_ESPECIFICO);
     esp_wifi_set_max_tx_power(82);
 
     Serial.print("MAC deste dispositivo: ");
-    Serial.println(WiFi.macAddress());
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    for (int i = 0; i < 6; i++) {
+        Serial.print("0x");
+        if (mac[i] < 0x10) Serial.print("0"); 
+        Serial.print(mac[i], HEX);
+        if (i < 5) Serial.print(", ");
+    }
+    Serial.println();
 
     // Inicia o ESP-NOW
     if (esp_now_init() != ESP_OK) {
@@ -108,16 +117,14 @@ void setup() {
     }
     
     // Configuração do peer
-    esp_now_peer_info_t peerInfo = {};
-    // esp_now_register_send_cb(OnDataSent); // Registro função callback de envio 
+    peerInfo = {}; // inicializa a variável global, sem redeclara-la
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;      // usa o canal já configurado no Wi-Fi
-    peerInfo.encrypt = false;    
-    if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    peerInfo.channel = 0; // usa o canal já configurado no Wi-Fi
+    peerInfo.encrypt = false;
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
         Serial.println("Failed to add peer");
         return;
     }
-
     // Serial.println("Peer adicionado e ESP-NOW pronto!");
 }
 
@@ -136,14 +143,15 @@ void loop() {
         message.accel = aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
 
-        #ifdef DEBUG
-            Serial.print("Touch raw value: ");
-            Serial.println(touchRead(T3));
-        #endif
+        // #ifdef DEBUG
+        //     Serial.print("Touch raw value: ");
+        //     Serial.println(touchRead(T3));
+        // #endif
 
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
 
-        delay(20);
+    #ifdef USE_DELAY
+        delay(delay_time);
+    #endif
     }  
 }
-

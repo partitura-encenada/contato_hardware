@@ -14,7 +14,7 @@
 const int   delay_time = 10;
 const int   touch_sensitivity = 20;  
 const int   callibration_time = 6;  
-const int   CANAL_ESPECIFICO = 8;
+const int   CANAL_ESPECIFICO = 10;
 
 MPU6050 mpu;
 
@@ -28,10 +28,10 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0xd8, 0xbc, 0x38, 0xe5, 0x3f, 0x8c};
+uint8_t     broadcastAddress[] = {0x78, 0xe3, 0x6d, 0xd8, 0x16, 0xd4};
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
-    int id = 8;
+    int id = 9;
     int roll;
     int accel;
     int touch;
@@ -74,10 +74,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1316);
-        mpu.setXGyroOffset(29);    
-        mpu.setYGyroOffset(-1);    
-        mpu.setZGyroOffset(10);   
+        mpu.setZAccelOffset(1718);
+        mpu.setXGyroOffset(-30);    
+        mpu.setYGyroOffset(-20);    
+        mpu.setZGyroOffset(19);    
     #endif
  
     if (dev_status == 0) { // Sucesso
@@ -93,7 +93,6 @@ void setup() {
         Serial.print(F("DMP Initialization failed (code ")); // Erro
         Serial.print(dev_status); // 1 = "initial memory load failed"; 2 = "DMP configuration updates failed"
     }
-
 
     // CONFIGURA WI-FI NO CANAL ESPECÍFICO
     WiFi.mode(WIFI_STA);           
@@ -144,10 +143,10 @@ void loop() {
         message.accel = aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
 
-        // #ifdef DEBUG
-        //     Serial.print("Touch raw value: ");
-        //     Serial.println(touchRead(T3));
-        // #endif
+        #ifdef DEBUG
+            Serial.print("Touch raw value: ");
+            Serial.println(touchRead(T3));
+        #endif
 
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
 

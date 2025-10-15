@@ -28,7 +28,7 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
+uint8_t     broadcastAddress[] = {0x78, 0xe3, 0x6d, 0xd8, 0x16, 0xd4};
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
     int id = 4;
@@ -143,10 +143,10 @@ void loop() {
         message.accel = aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
 
-        // #ifdef DEBUG
-        //     Serial.print("Touch raw value: ");
-        //     Serial.println(touchRead(T3));
-        // #endif
+        #ifdef DEBUG
+            Serial.print("Touch raw value: ");
+            Serial.println(touchRead(T3));
+        #endif
 
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
 

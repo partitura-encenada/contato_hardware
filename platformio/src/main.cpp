@@ -68,7 +68,13 @@ byte lastNote;
 // NEW: accel threshold (persisted)
 int32_t accelThreshold = 10000; // default 10000 (will be loaded from prefs if present)
 
-// helper functions unchanged...
+// helper functions 
+float clamp(float v, float max_v, float min_v) {
+    if (v > max_v)  return max_v;
+    if (v < min_v) return min_v;
+    return v;
+}
+
 void playNote(byte n, uint8_t channel=1){
   lastNote = n;
   if (pServer->getConnectedCount()) MIDI.sendNoteOn(n, 80, channel);
@@ -172,26 +178,16 @@ class CalibrateCharCallbacks : public NimBLECharacteristicCallbacks
   }
 };
 
-// NEW: accel threshold write callback
 class AccelSensCharCallbacks : public NimBLECharacteristicCallbacks
 {
   void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override
   {
     std::string val = pChar->getValue();
-    if (val.size() >= 4) {
-      // interpret little-endian 32-bit value
-      int32_t v = 0;
-      memcpy(&v, val.data(), sizeof(int32_t));
-      accelThreshold = v;
-      prefs.begin(PREF_NAMESPACE, false);
-      prefs.putInt(PREF_KEY_SENS, accelThreshold);
-      prefs.end();
-      Serial.printf("Novo accel threshold recebido: %ld (salvo na NVS)\n", (long)accelThreshold);
-    } else if (val.size() == 2) {
-      // fallback: 16-bit
+    if (val.size() == 2) {
       int16_t vv = 0;
       memcpy(&vv, val.data(), sizeof(int16_t));
-      accelThreshold = (int32_t)vv;
+      accelThreshold = vv;
+      // Salva imediatamente em armazenamento persistente
       prefs.begin(PREF_NAMESPACE, false);
       prefs.putInt(PREF_KEY_SENS, accelThreshold);
       prefs.end();
@@ -258,38 +254,36 @@ void setup()
   pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(new ServerCallbacks());
   NimBLEService *pMainService = pServer->createService(MAIN_SERVICE_UUID);
-
+  
   pSectionsChar = pMainService->createCharacteristic(
-      SECTIONS_CHAR_UUID,
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-  pSectionsChar->setCallbacks(new SectionsCharCallbacks());
+    SECTIONS_CHAR_UUID,
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+    pSectionsChar->setCallbacks(new SectionsCharCallbacks());
 
+  pAccelSensChar = pMainService->createCharacteristic(
+    ACCEL_SENS_CHAR_UUID,
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+  pAccelSensChar->setCallbacks(new AccelSensCharCallbacks());
+    
   pGyroChar = pMainService->createCharacteristic(
-      GYRO_CHAR_UUID,
-      NIMBLE_PROPERTY::NOTIFY);
+    GYRO_CHAR_UUID,
+    NIMBLE_PROPERTY::NOTIFY);
   pGyroChar->setCallbacks(new NotifyCharCallbacks());
 
   pTouchChar = pMainService->createCharacteristic(
-      TOUCH_CHAR_UUID,
-      NIMBLE_PROPERTY::NOTIFY);
+    TOUCH_CHAR_UUID,
+    NIMBLE_PROPERTY::NOTIFY);
   pTouchChar->setCallbacks(new NotifyCharCallbacks());
 
-  pCalibrateChar = pMainService->createCharacteristic(
-      CALIBRATE_CHAR_UUID,
-      NIMBLE_PROPERTY::WRITE);
-  pCalibrateChar->setCallbacks(new CalibrateCharCallbacks());
-
-  // NEW: accel char (notify)
   pAccelChar = pMainService->createCharacteristic(
-      ACCEL_CHAR_UUID,
-      NIMBLE_PROPERTY::NOTIFY);
+    ACCEL_CHAR_UUID,
+    NIMBLE_PROPERTY::NOTIFY);
   pAccelChar->setCallbacks(new NotifyCharCallbacks());
 
-  // NEW: accel threshold control (read/write)
-  pAccelSensChar = pMainService->createCharacteristic(
-      ACCEL_SENS_CHAR_UUID,
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-  pAccelSensChar->setCallbacks(new AccelSensCharCallbacks());
+  pCalibrateChar = pMainService->createCharacteristic(
+    CALIBRATE_CHAR_UUID,
+    NIMBLE_PROPERTY::WRITE);
+  pCalibrateChar->setCallbacks(new CalibrateCharCallbacks());
 
   pMainService->start();
 
@@ -334,13 +328,13 @@ void loop()
       mpu.dmpGetGravity(&gravity, &q);
       mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
       int gyro = (int)(ypr[2] * -180/M_PI);
+      gyro = clamp(gyro, 90.0f, -90.0f);
       bool touch = true ? touchRead(T3) < 30 : false;
-      // NOTE: aaReal.x is a signed int16 from the MPU library
-      int32_t accel_raw = (int32_t)aaReal.x;
+      int accel = aaReal.x/10;
 
       std::string notes = pSectionsChar->getValue();
-      int section = (-gyro + 90.0f) / 180 * notes.length();
-      if (section == notes.length()) section = notes.length() - 1;
+      int section = (-gyro + 90) / 180 * notes.length();
+      if (section < 0) section = 0;
       byte currentNote = notes[section];
       
       // Lógica de seleção de notas
@@ -366,23 +360,16 @@ void loop()
         }
       }
 
-      // ACCEL logic:
-      // if abs(accel_raw) exceeds accelThreshold and 2 seconds passed since last activation,
-      // trigger MIDI noteOn on channel 8 and keep it for ACCEL_DURATION_MS
-      if (abs(accel_raw) > accelThreshold && (now - lastAccel) >= ACCEL_DURATION_MS && !accelFlag) {
-        // trigger
-        Serial.printf("Accel triggered: raw=%ld threshold=%ld\n", (long)accel_raw, (long)accelThreshold);
+      // Lógica do acelerômetro
+      if (abs(accel) > accelThreshold && (now - lastAccel) >= ACCEL_DURATION_MS && !accelFlag) {
+        Serial.printf("Accel triggered: value=%d threshold=%d\n", accel, accelThreshold);
         playNote(currentNote, 8); // channel 8
         accelFlag = true;
         lastAccel = now;
       }
-
-      // if accelFlag and duration passed -> stop note
       if (accelFlag && (now - lastAccel) >= ACCEL_DURATION_MS) {
         stopNote(lastNote, 8);
         accelFlag = false;
-        // keep lastAccel as marker of last activation time (so next activation needs 2s more)
-        lastAccel = now;
       }
 
       if (pServer->getConnectedCount()){
@@ -393,13 +380,8 @@ void loop()
         pTouchChar->notify();
 
         // notify accel (send raw int value)
-        pAccelChar->setValue((int)accel_raw);
+        pAccelChar->setValue((int)accel);
         pAccelChar->notify();
-
-        // ensure accel sens char value is readable (update its value for reads)
-        // setValue for accel sens as 32-bit int (little endian)
-        int32_t thr = accelThreshold;
-        pAccelSensChar->setValue((uint8_t*)&thr, sizeof(int32_t));
       }
     }
   }

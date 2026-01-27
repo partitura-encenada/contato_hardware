@@ -16,8 +16,6 @@ static const char *PREF_NAMESPACE = "mpu";
 static const char *PREF_KEY_OFFS = "offs";
 static const char *PREF_KEY_SECTIONS = "sections";
 static const char *PREF_KEY_SENS = "sens";
-static const char *PREF_KEY_DIR = "dir";   
-static const char *PREF_KEY_LEGATO = "legato";
 
 static const char *DEVICE_NAME = "Contato";
 static const char *MAIN_SERVICE_UUID = "886520c2-76cb-4924-a033-729914e5bd76";
@@ -26,8 +24,6 @@ static const char *ACCEL_SENS_CHAR_UUID = "c7f2b2e2-1a2b-4c3d-9f0a-123456abcdef"
 static const char *GYRO_CHAR_UUID = "f8d968fe-99d7-46c4-a61c-f38093af6ec8";
 static const char *ACCEL_CHAR_UUID = "d3b8a1f1-9c4f-4c9b-8f1e-abcdef123456";
 static const char *TOUCH_CHAR_UUID = "55558523-eca8-4b78-ae20-97ed68c68c26";
-static const char *DIR_CHAR_UUID = "a1b2c3d4-0001-4b33-a751-6ce34ec4c701";   
-static const char *LEGATO_CHAR_UUID = "a1b2c3d4-0002-4b33-a751-6ce34ec4c702";   
 static const char *CALIBRATE_CHAR_UUID = "b4d0c9f8-3b9a-4a4e-93f2-2a8c9f5ee7a2";
 
 
@@ -38,8 +34,6 @@ NimBLECharacteristic *pGyroChar = nullptr;
 NimBLECharacteristic *pAccelChar = nullptr;
 NimBLECharacteristic *pAccelSensChar = nullptr;
 NimBLECharacteristic *pTouchChar = nullptr;
-NimBLECharacteristic *pDirChar = nullptr;
-NimBLECharacteristic *pLegatoChar = nullptr;
 NimBLECharacteristic *pCalibrateChar = nullptr;
 
 MPU6050 mpu;
@@ -80,13 +74,13 @@ float clamp(float v, float max_v, float min_v) {
     return v;
 }
 
-void playNote(byte n, uint8_t channel=2){
+void playNote(byte n, uint8_t channel=1){
   lastNote = n;
   if (pServer->getConnectedCount()) MIDI.sendNoteOn(n, 80, channel);
   Serial.printf("Tocando nota: %d (ch %u)\n", n, (unsigned)channel);
 }
 
-void stopNote(byte n, uint8_t channel=2){
+void stopNote(byte n, uint8_t channel=1){
   lastNote = n;
   if (pServer->getConnectedCount()) MIDI.sendNoteOff(n, 80, channel);
   Serial.printf("Parando nota: %d (ch %u)\n", n, (unsigned)channel);
@@ -175,34 +169,6 @@ class NotifyCharCallbacks : public NimBLECharacteristicCallbacks
   }
 };
 
-class DirCharCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
-    std::string v = pChar->getValue();
-    if (v.size() >= 1) {
-      uint8_t b = (uint8_t)v[0];
-      // persist immediately
-      prefs.putUChar(PREF_KEY_DIR, b);
-      Serial.printf("DIR write received: %u → flip_gyro=%s (saved)\n", (unsigned)b, b ? "true" : "false");
-      // update the characteristic value so reads return the same byte
-      pChar->setValue(&b, 1);
-    }
-  }
-};
-
-class LegatoCharCallbacks : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
-    std::string v = pChar->getValue();
-    if (v.size() >= 1) {
-      uint8_t b = (uint8_t)v[0];
-      // persist immediately
-      prefs.putUChar(PREF_KEY_LEGATO, b);
-      Serial.printf("LEGATO write received: %u → legato_mode=%s (saved)\n", (unsigned)b, b ? "true" : "false");
-      // update characteristic so clients that read immediately will see current value
-      pChar->setValue(&b, 1);
-    }
-  }
-};
-
 class CalibrateCharCallbacks : public NimBLECharacteristicCallbacks
 {
   void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override
@@ -270,6 +236,7 @@ void setup()
     prefs.end();
     // load accel threshold (if present)
     prefs.begin(PREF_NAMESPACE, true);
+    if (prefs.isKey(PREF_KEY_SENS)) {
       accelThreshold = prefs.getInt(PREF_KEY_SENS, accelThreshold);
       Serial.printf("Accel threshold carregado da NVS: %ld\n", (long)accelThreshold);
     } else {
@@ -295,16 +262,6 @@ void setup()
     ACCEL_SENS_CHAR_UUID,
     NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
   pAccelSensChar->setCallbacks(new AccelSensCharCallbacks());
-
-  pDirChar = pMainService->createCharacteristic(
-    DIR_CHAR_UUID,
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-  pDirChar->setCallbacks(new DirCharCallbacks());
-
-  pLegatoChar = pMainService->createCharacteristic(
-    LEGATO_CHAR_UUID,
-    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-  pLegatoChar->setCallbacks(new LegatoCharCallbacks());
     
   pGyroChar = pMainService->createCharacteristic(
     GYRO_CHAR_UUID,
@@ -331,15 +288,8 @@ void setup()
   std::string saved_sections;
   prefs.begin(PREF_NAMESPACE, true);
   size_t size = prefs.getBytes(PREF_KEY_SECTIONS, nullptr, 0);
-  if (size != 0)
+  if (size == 0)
   {
-    std::vector<char> buffer(size);
-    size_t read = prefs.getBytes(PREF_KEY_SECTIONS, buffer.data(), size);
-    prefs.end();
-    saved_sections.assign(buffer.begin(), buffer.end());
-    pSectionsChar->setValue(buffer);
-  } 
-  else {
     prefs.end();
     Serial.println("Nenhuma nota encontrada ao iniciar.");
     std::string def;
@@ -347,28 +297,14 @@ void setup()
       def.push_back((char)60);
     pSectionsChar->setValue(def);
   }
-  
-  prefs.begin(PREF_NAMESPACE, false);
-  size = prefs.getBytes(PREF_KEY_DIR, nullptr, 0);
-  if (size != 0){
-    uint8_t stored_dir = prefs.getUChar(PREF_KEY_DIR, 0);
-    pDirChar->setValue(stored_dir != 0);
-  } 
-  else {
-    pDirChar->setValue(true);
+  else
+  {
+    std::vector<char> buffer(size);
+    size_t read = prefs.getBytes(PREF_KEY_SECTIONS, buffer.data(), size);
+    prefs.end();
+    saved_sections.assign(buffer.begin(), buffer.end());
+    pSectionsChar->setValue(buffer);
   }
-  prefs.end();
-
-  prefs.begin(PREF_NAMESPACE, false);
-  size = prefs.getBytes(PREF_KEY_LEGATO, nullptr, 0);
-  if (size != 0){
-    uint8_t stored_dir = prefs.getUChar(PREF_KEY_LEGATO, 0);
-    pLegatoChar->setValue(stored_dir != 0);
-  } 
-  else {
-    pLegatoChar->setValue(true);
-  }
-  prefs.end();
 
   // Inicializa Service MIDI 
   MIDI.begin(MIDI_CHANNEL_OMNI);

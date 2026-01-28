@@ -13,8 +13,8 @@
 // Constantes e pseudo-constantes
 const int   delay_time = 10;
 const int   touch_sensitivity = 20;  
-const int   callibration_time = 6; 
-const int   CANAL_ESPECIFICO = 3;
+const int   callibration_time = 6;   
+const int   CANAL_ESPECIFICO = 7;
 
 MPU6050 mpu;
 
@@ -28,7 +28,7 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0x40, 0x22, 0xd8, 0x4f, 0x5f, 0xd8};
+uint8_t     broadcastAddress[] = {0xcc, 0xdb, 0xa7, 0x91, 0x6d, 0x9c};
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
     int id = 5;
@@ -74,10 +74,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1088);
-        mpu.setXGyroOffset(58);    
-        mpu.setYGyroOffset(24);    
-        mpu.setZGyroOffset(-16);   
+        mpu.setZAccelOffset(1308);
+        mpu.setXGyroOffset(130);    
+        mpu.setYGyroOffset(3);    
+        mpu.setZGyroOffset(54);  
     #endif
  
     if (dev_status == 0) { // Sucesso
@@ -94,7 +94,7 @@ void setup() {
         Serial.print(dev_status); // 1 = "initial memory load failed"; 2 = "DMP configuration updates failed"
     }
 
-// CONFIGURA WI-FI NO CANAL ESPECÍFICO
+    // CONFIGURA WI-FI NO CANAL ESPECÍFICO
     WiFi.mode(WIFI_STA);           
     setChannel(CANAL_ESPECIFICO);
     esp_wifi_set_max_tx_power(82);

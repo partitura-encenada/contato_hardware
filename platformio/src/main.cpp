@@ -32,13 +32,19 @@ static const char *CALIBRATE_CHAR_UUID = "b4d0c9f8-3b9a-4a4e-93f2-2a8c9f5ee7a2";
 BLEMIDI_CREATE_INSTANCE(DEVICE_NAME, MIDI);
 static NimBLEServer *pServer;
 NimBLECharacteristic *pSectionsChar = nullptr;
-NimBLECharacteristic *pGyroChar = nullptr;
-NimBLECharacteristic *pAccelChar = nullptr;
+NimBLECharacteristic *pStatusChar = nullptr;
 NimBLECharacteristic *pAccelSensChar = nullptr;
-NimBLECharacteristic *pTouchChar = nullptr;
 NimBLECharacteristic *pDirChar = nullptr;
 NimBLECharacteristic *pLegatoChar = nullptr;
 NimBLECharacteristic *pCalibrateChar = nullptr;
+
+struct __attribute__((packed)) StatusPacket {
+    int16_t gyro_x;
+    int16_t accel_x;
+    uint8_t touch;
+};
+
+StatusPacket status;
 
 MPU6050 mpu;
 struct MPUOffsets
@@ -59,7 +65,6 @@ VectorInt16 aaReal;  // [x, y, z]            Aceleração sem gravidade
 VectorFloat gravity; // [x, y, z]            Vetor gravidade
 bool dmp_ready = false;
 float ypr[3]; // [yaw, pitch, roll]
-
 const unsigned long NOTE_INTERVAL_MS = 3;
 const unsigned long ACCEL_DURATION_MS = 2000;
 unsigned long lastSent = 0;
@@ -307,20 +312,10 @@ void setup()
     //     NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
     // pLegatoChar->setCallbacks(new LegatoCharCallbacks());
 
-    pGyroChar = pMainService->createCharacteristic(
+    pStatusChar = pMainService->createCharacteristic(
         GYRO_CHAR_UUID,
         NIMBLE_PROPERTY::NOTIFY);
-    pGyroChar->setCallbacks(new NotifyCharCallbacks());
-
-    pTouchChar = pMainService->createCharacteristic(
-        TOUCH_CHAR_UUID,
-        NIMBLE_PROPERTY::NOTIFY);
-    pTouchChar->setCallbacks(new NotifyCharCallbacks());
-
-    pAccelChar = pMainService->createCharacteristic(
-        ACCEL_CHAR_UUID,
-        NIMBLE_PROPERTY::NOTIFY);
-    pAccelChar->setCallbacks(new NotifyCharCallbacks());
+    pStatusChar->setCallbacks(new NotifyCharCallbacks());
 
     pCalibrateChar = pMainService->createCharacteristic(
         CALIBRATE_CHAR_UUID,
@@ -360,17 +355,6 @@ void setup()
       pDirChar->setValue(true);
     }
 
-    // size = prefs.getBytes(PREF_KEY_LEGATO, nullptr, 0);
-    // if (size != 0)
-    // {
-    //   uint8_t stored_dir = prefs.getUChar(PREF_KEY_LEGATO, 0);
-    //   pLegatoChar->setValue(stored_dir != 0);
-    // }
-    // else
-    // {
-    //   pLegatoChar->setValue(true);
-    // }
-    // Inicializa Service MIDI
     MIDI.begin(MIDI_CHANNEL_OMNI);
     pServer = NimBLEDevice::getServer();
     pServer->setCallbacks(new ServerCallbacks());
@@ -448,15 +432,15 @@ void loop()
 
       if (pServer->getConnectedCount())
       {
-        pGyroChar->setValue(gyro);
-        pGyroChar->notify();
-
-        pTouchChar->setValue((uint8_t)touch);
-        pTouchChar->notify();
-
-        // notify accel (send raw int value)
-        pAccelChar->setValue((int)accel);
-        pAccelChar->notify();
+        status.gyro_x = gyro;
+        status.accel_x = accel;
+        status.touch = touch;
+        pStatusChar->setValue(
+            (uint8_t*)&status,
+            sizeof(StatusPacket)
+        );
+        pStatusChar->notify();
+        delay(10);
       }
     }
   }

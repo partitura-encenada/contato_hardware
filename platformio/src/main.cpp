@@ -191,10 +191,8 @@ class DirCharCallbacks : public NimBLECharacteristicCallbacks
     {
       uint8_t b = (uint8_t)v[0];
       // persist immediately
-      prefs.putUChar(PREF_KEY_DIR, b);
+      prefs.putChar(PREF_KEY_DIR, b);
       Serial.printf("DIR write received: %u → flip_gyro=%s (saved)\n", (unsigned)b, b ? "true" : "false");
-      // update the characteristic value so reads return the same byte
-      pChar->setValue(&b, 1);
     }
   }
 };
@@ -270,21 +268,24 @@ void setup()
     MPUOffsets offsets;
     prefs.begin(PREF_NAMESPACE, true);
     size_t size = prefs.getBytes(PREF_KEY_OFFS, &offsets, sizeof(MPUOffsets));
-    if (size == sizeof(MPUOffsets))
-    {
-      // aplica offsets
-      mpu.setXAccelOffset((int)offsets.accelX);
-      mpu.setYAccelOffset((int)offsets.accelY);
-      mpu.setZAccelOffset((int)offsets.accelZ);
-      mpu.setXGyroOffset((int)offsets.gyroX);
-      mpu.setYGyroOffset((int)offsets.gyroY);
-      mpu.setZGyroOffset((int)offsets.gyroZ);
-      Serial.println("Offsets carregados e aplicados:");
-      printOffsets(offsets);
-    }
+    // if (size == sizeof(MPUOffsets))
+    // {
+    //   // aplica offsets
+    //   mpu.setXAccelOffset((int)offsets.accelX);
+    //   mpu.setYAccelOffset((int)offsets.accelY);
+    //   mpu.setZAccelOffset((int)offsets.accelZ);
+    //   mpu.setXGyroOffset((int)offsets.gyroX);
+    //   mpu.setYGyroOffset((int)offsets.gyroY);
+    //   mpu.setZGyroOffset((int)offsets.gyroZ);
+    //   Serial.println("Offsets carregados e aplicados:");
+    //   printOffsets(offsets);
+    // }
     // load accel threshold (if present)
     accelThreshold = prefs.getInt(PREF_KEY_SENS, accelThreshold);
     Serial.printf("Accel threshold carregado da NVS: %ld\n", (long)accelThreshold);
+
+    mpu.CalibrateGyro(6);
+    mpu.CalibrateAccel(6);
 
     // Inicializa NimBLE
     NimBLEDevice::init(DEVICE_NAME);
@@ -377,7 +378,9 @@ void loop()
       mpu.dmpGetGravity(&gravity, &q);
       mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
       int gyro = ypr[2] * -180 / M_PI;
-      gyro = clamp(gyro, 90, -90);
+      gyro = clamp(gyro, 89, -89);
+      std::string dir = pDirChar->getValue();
+      if ((bool)dir[0]) gyro = -gyro;
       bool touch = true ? touchRead(T3) < 30 : false;
       int accel = aaReal.x / 10;
 
@@ -420,13 +423,13 @@ void loop()
       if (abs(accel) > accelThreshold && (now - lastAccel) >= ACCEL_DURATION_MS && !accelFlag)
       {
         Serial.printf("Accel triggered: value=%d threshold=%d\n", accel, accelThreshold);
-        playNote(currentNote, 8); // channel 8
+        playNote(36, 8); // channel 8
         accelFlag = true;
         lastAccel = now;
       }
       if (accelFlag && (now - lastAccel) >= ACCEL_DURATION_MS)
       {
-        stopNote(lastNote, 8);
+        stopNote(36, 8);
         accelFlag = false;
       }
 

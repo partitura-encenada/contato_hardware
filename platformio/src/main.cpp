@@ -282,6 +282,18 @@ void setup() {
 
     pMainService->start();
 
+    // Advertise the BLE MIDI service UUID in the advertisement packet (not scan
+    // response) so bridges that don't issue a scan request can still find us.
+    // Device name goes in the scan response to avoid exceeding the 31-byte limit.
+    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    NimBLEAdvertisementData advData;
+    advData.addServiceUUID(MAIN_SERVICE_UUID);
+    pAdvertising->setAdvertisementData(advData);
+    NimBLEAdvertisementData scanData;
+    scanData.setName(DEVICE_NAME);
+    pAdvertising->setScanResponseData(scanData);
+    pAdvertising->start();
+
     if (!saved_sections.empty()) {
         pSectionsChar->setValue(saved_sections);
     } else {

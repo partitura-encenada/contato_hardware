@@ -278,6 +278,10 @@ void setup() {
     pDirChar->setValue(stored_dir != 0);
 
     MIDI.begin(MIDI_CHANNEL_OMNI);
+    // MIDI.begin() reinitializes NimBLE and overwrites server callbacks.
+    // Re-apply ours so connect/disconnect events work correctly.
+    pServer = NimBLEDevice::getServer();
+    pServer->setCallbacks(new ServerCallbacks());
     Serial.println("Anúncio BLE iniciado");
     dmp_ready = true;
 }

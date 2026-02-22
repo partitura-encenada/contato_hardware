@@ -98,18 +98,8 @@ static bool calibrateAndSaveOffsets() {
 }
 
 // ─── BLE Callbacks ───────────────────────────────────────────────────────────
-
-class ServerCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer *, NimBLEConnInfo &) override {
-        Serial.println("Client conectado");
-        digitalWrite(LED_PIN, HIGH);
-    }
-    void onDisconnect(NimBLEServer *, NimBLEConnInfo &, int) override {
-        Serial.println("Client desconectado, anunciando");
-        digitalWrite(LED_PIN, LOW);
-        NimBLEDevice::startAdvertising();
-    }
-};
+// LED connect/disconnect is handled via MIDI transport callbacks in setup().
+// Re-advertising on disconnect is handled by the library (advertiseOnDisconnect).
 
 class SectionsCharCallbacks : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
@@ -238,10 +228,24 @@ void setup() {
         mpu.CalibrateAccel(6);
     }
 
-    // ── BLE setup ──
-    NimBLEDevice::init(DEVICE_NAME);
-    pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new ServerCallbacks());
+    // ── BLE/MIDI setup ──
+    // MIDI.begin() calls NimBLEDevice::init(), creates the server, sets its own
+    // transport callbacks, and starts advertising. We must call it first.
+    MIDI.begin(MIDI_CHANNEL_OMNI);
+
+    // Hook LED to the MIDI transport's connect/disconnect events.
+    // advertiseOnDisconnect(true) is already set by the library — no need to
+    // call NimBLEDevice::startAdvertising() ourselves on disconnect.
+    BLEMIDI.setHandleConnected([]() {
+        Serial.println("Client conectado");
+        digitalWrite(LED_PIN, HIGH);
+    });
+    BLEMIDI.setHandleDisconnected([]() {
+        Serial.println("Client desconectado, anunciando");
+        digitalWrite(LED_PIN, LOW);
+    });
+
+    pServer = NimBLEDevice::getServer();
 
     NimBLEService *pMainService = pServer->createService(MAIN_SERVICE_UUID);
 
@@ -277,7 +281,6 @@ void setup() {
 
     pDirChar->setValue(stored_dir != 0);
 
-    MIDI.begin(MIDI_CHANNEL_OMNI);
     Serial.println("Anúncio BLE iniciado");
     dmp_ready = true;
 }

@@ -8,7 +8,13 @@
 
 // ─── BLE ─────────────────────────────────────────────────────────────────────
 static const char *DEVICE_NAME         = "Contato";
-static const char *MAIN_SERVICE_UUID   = "886520c2-76cb-4924-a033-729914e5bd76";
+
+// Standard BLE MIDI service and characteristic UUIDs (Apple / MIDI Association spec).
+// Using these lets any MIDI app discover the device as a MIDI peripheral.
+static const char *MAIN_SERVICE_UUID   = "03B80E5A-EDE8-4B33-A751-6CE34EC4C700";
+static const char *MIDI_CHAR_UUID      = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
+
+// Custom sensor/control characteristics, co-hosted in the same service.
 static const char *SECTIONS_CHAR_UUID  = "251beea3-1c81-454f-a9dd-8561ec692ded";
 static const char *ACCEL_SENS_CHAR_UUID= "c7f2b2e2-1a2b-4c3d-9f0a-123456abcdef";
 static const char *STATUS_CHAR_UUID    = "f8d968fe-99d7-46c4-a61c-f38093af6ec8";

@@ -2,8 +2,6 @@
 #include <Wire.h>
 #include <Preferences.h>
 #include "MPU6050_6Axis_MotionApps20.h"
-#include <BLEMIDI_Transport.h>
-#include <hardware/BLEMIDI_ESP32_Nimble.h>
 #include <NimBLEDevice.h>
 
 #include "config.h"
@@ -13,8 +11,8 @@
 
 Preferences prefs;
 
-BLEMIDI_CREATE_INSTANCE(DEVICE_NAME, MIDI);
 static NimBLEServer         *pServer        = nullptr;
+NimBLECharacteristic        *pMidiChar      = nullptr;
 NimBLECharacteristic        *pSectionsChar  = nullptr;
 NimBLECharacteristic        *pStatusChar    = nullptr;
 NimBLECharacteristic        *pAccelSensChar = nullptr;
@@ -48,17 +46,29 @@ static float clamp(float v, float max_v, float min_v) {
     return v;
 }
 
+// BLE MIDI packet: 2-byte timestamp header + MIDI status + data bytes.
+// Timestamp is derived from millis(); high 6 bits in header, low 7 bits in ts byte.
+static void sendMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
+    if (!pServer || !pServer->getConnectedCount()) return;
+    uint16_t ts = (uint16_t)millis();
+    uint8_t pkt[5] = {
+        (uint8_t)(0x80 | ((ts >> 7) & 0x3F)),  // header
+        (uint8_t)(0x80 | (ts & 0x7F)),          // timestamp
+        status, data1, data2
+    };
+    pMidiChar->setValue(pkt, sizeof(pkt));
+    pMidiChar->notify();
+}
+
 static void playNote(byte n, uint8_t channel = 1) {
     lastNote = n;
-    if (pServer->getConnectedCount())
-        MIDI.sendNoteOn(n, 80, channel);
+    sendMidiMessage(0x90 | ((channel - 1) & 0x0F), n, 80);
     Serial.printf("Tocando nota: %d (ch %u)\n", n, (unsigned)channel);
 }
 
 static void stopNote(byte n, uint8_t channel = 1) {
     lastNote = n;
-    if (pServer->getConnectedCount())
-        MIDI.sendNoteOff(n, 80, channel);
+    sendMidiMessage(0x80 | ((channel - 1) & 0x0F), n, 80);
     Serial.printf("Parando nota: %d (ch %u)\n", n, (unsigned)channel);
 }
 
@@ -245,6 +255,11 @@ void setup() {
 
     NimBLEService *pMainService = pServer->createService(MAIN_SERVICE_UUID);
 
+    // BLE MIDI characteristic (standard spec: READ | WRITE_NR | NOTIFY)
+    pMidiChar = pMainService->createCharacteristic(
+        MIDI_CHAR_UUID,
+        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::NOTIFY);
+
     pSectionsChar = pMainService->createCharacteristic(
         SECTIONS_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
     pSectionsChar->setCallbacks(new SectionsCharCallbacks());
@@ -277,11 +292,6 @@ void setup() {
 
     pDirChar->setValue(stored_dir != 0);
 
-    MIDI.begin(MIDI_CHANNEL_OMNI);
-    // MIDI.begin() reinitializes NimBLE and overwrites server callbacks.
-    // Re-apply ours so connect/disconnect events work correctly.
-    pServer = NimBLEDevice::getServer();
-    pServer->setCallbacks(new ServerCallbacks());
     Serial.println("Anúncio BLE iniciado");
     dmp_ready = true;
 }

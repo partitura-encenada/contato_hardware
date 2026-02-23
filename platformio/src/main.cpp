@@ -7,7 +7,7 @@
 #include "config.h"
 #include "types.h"
 
-// ─── Globals ─────────────────────────────────────────────────────────────────
+// ─── Variáveis Globais ───────────────────────────────────────────────────────
 
 Preferences prefs;
 
@@ -28,7 +28,7 @@ Quaternion  q;
 VectorInt16 aa;
 VectorInt16 aaReal;
 VectorFloat gravity;
-float       ypr[3];       // [yaw, pitch, roll]
+float       ypr[3];       // [yaw, pitch, roll] — guinada, arfagem, rolagem
 bool        dmp_ready = false;
 
 int32_t       accelThreshold = DEFAULT_ACCEL_THRESHOLD;
@@ -38,7 +38,7 @@ bool          touchFlag      = false;
 bool          accelFlag      = false;
 byte          lastNote       = 0;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Auxiliares ──────────────────────────────────────────────────────────────
 
 static float clamp(float v, float max_v, float min_v) {
     if (v > max_v) return max_v;
@@ -46,13 +46,13 @@ static float clamp(float v, float max_v, float min_v) {
     return v;
 }
 
-// BLE MIDI packet: 2-byte timestamp header + MIDI status + data bytes.
-// Timestamp is derived from millis(); high 6 bits in header, low 7 bits in ts byte.
+// Pacote BLE MIDI: cabeçalho de timestamp de 2 bytes + status MIDI + bytes de dados.
+// Timestamp derivado de millis(); 6 bits altos no cabeçalho, 7 bits baixos no byte ts.
 static void sendMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     if (!pServer || !pServer->getConnectedCount()) return;
     uint16_t ts = (uint16_t)millis();
     uint8_t pkt[5] = {
-        (uint8_t)(0x80 | ((ts >> 7) & 0x3F)),  // header
+        (uint8_t)(0x80 | ((ts >> 7) & 0x3F)),  // cabeçalho
         (uint8_t)(0x80 | (ts & 0x7F)),          // timestamp
         status, data1, data2
     };
@@ -77,7 +77,7 @@ static void printOffsets(const MPUOffsets &o) {
     Serial.printf("Offsets do giroscópio:   X=%d Y=%d Z=%d\n", o.gyroX,  o.gyroY,  o.gyroZ);
 }
 
-// Runs MPU calibration and saves offsets to NVS. Returns true on success.
+// Executa a calibração do MPU e salva os offsets na NVS. Retorna true em caso de sucesso.
 static bool calibrateAndSaveOffsets() {
     Serial.println("Iniciando calibração");
     mpu.CalibrateGyro(6);
@@ -96,7 +96,7 @@ static bool calibrateAndSaveOffsets() {
 
     prefs.begin(PREF_NAMESPACE, false);
     size_t wrote = prefs.putBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets));
-    prefs.end();  // always close, regardless of outcome
+    prefs.end();  // sempre fecha, independente do resultado
 
     if (wrote == sizeof(MPUOffsets)) {
         Serial.println("Offsets salvos na NVS.");
@@ -107,7 +107,7 @@ static bool calibrateAndSaveOffsets() {
     return false;
 }
 
-// ─── BLE Callbacks ───────────────────────────────────────────────────────────
+// ─── Callbacks BLE ───────────────────────────────────────────────────────────
 
 class ServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer *, NimBLEConnInfo &) override {
@@ -182,7 +182,7 @@ class CalibrateCharCallbacks : public NimBLECharacteristicCallbacks {
     }
 };
 
-// ─── Setup ───────────────────────────────────────────────────────────────────
+// ─── Configuração ────────────────────────────────────────────────────────────
 
 void setup() {
     Serial.begin(115200);
@@ -208,7 +208,7 @@ void setup() {
     mpu.setDMPEnabled(true);
     Serial.println("DMP inicializado e ativado.");
 
-    // ── Load all persisted settings in one NVS session ──
+    // ── Carrega todas as configurações persistidas em uma sessão NVS ──
     prefs.begin(PREF_NAMESPACE, true);
 
     MPUOffsets offsets;
@@ -238,24 +238,24 @@ void setup() {
     }
 
     prefs.end();
-    // ── End NVS session ──
+    // ── Fim da sessão NVS ──
 
-    // Run MPU calibration only if no saved offsets exist.
-    // Skipping this when offsets are loaded avoids overwriting known-good values.
+    // Executa calibração do MPU apenas se não houver offsets salvos.
+    // Ignorar quando offsets são carregados evita sobrescrever valores conhecidos como bons.
     if (!have_offsets) {
         Serial.println("Nenhum offset salvo; calibrando agora...");
         mpu.CalibrateGyro(6);
         mpu.CalibrateAccel(6);
     }
 
-    // ── BLE setup ──
+    // ── Configuração BLE ──
     NimBLEDevice::init(DEVICE_NAME);
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
 
     NimBLEService *pMainService = pServer->createService(MAIN_SERVICE_UUID);
 
-    // BLE MIDI characteristic (standard spec: READ | WRITE_NR | NOTIFY)
+    // Característica BLE MIDI (especificação padrão: READ | WRITE_NR | NOTIFY)
     pMidiChar = pMainService->createCharacteristic(
         MIDI_CHAR_UUID,
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::NOTIFY);
@@ -282,16 +282,10 @@ void setup() {
 
     pMainService->start();
 
-    // Advertise the BLE MIDI service UUID in the advertisement packet (not scan
-    // response) so bridges that don't issue a scan request can still find us.
-    // Device name goes in the scan response to avoid exceeding the 31-byte limit.
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-    NimBLEAdvertisementData advData;
-    advData.addServiceUUID(MAIN_SERVICE_UUID);
-    pAdvertising->setAdvertisementData(advData);
-    NimBLEAdvertisementData scanData;
-    scanData.setName(DEVICE_NAME);
-    pAdvertising->setScanResponseData(scanData);
+    pAdvertising->addServiceUUID(MAIN_SERVICE_UUID);
+    pAdvertising->enableScanResponse(true);
+    pAdvertising->setName(DEVICE_NAME);
     pAdvertising->start();
 
     if (!saved_sections.empty()) {
@@ -325,27 +319,27 @@ void loop() {
     mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
     mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
 
-    // Map roll angle [-89°, +89°] for note selection
+    // Mapeia o ângulo de rolagem [-89°, +89°] para seleção de nota
     int gyro = (int)(ypr[2] * -180.0f / M_PI);
     gyro = (int)clamp((float)gyro, GYRO_MAX_DEG, -GYRO_MAX_DEG);
 
-    // Optionally invert direction (configured via BLE)
+    // Inverte direção opcionalmente (configurado via BLE)
     std::string dir = pDirChar->getValue();
     if (dir.size() >= 1 && (bool)dir[0]) gyro = -gyro;
 
     bool touch = touchRead(TOUCH_PIN) < TOUCH_THRESHOLD;
     int  accel = aaReal.x / 10;
 
-    // Map gyro position to a note index in the configured note array
+    // Mapeia a posição do giroscópio para índice de nota no array configurado
     std::string notes = pSectionsChar->getValue();
     int section = (int)((-gyro + GYRO_MAX_DEG) / (2.0f * GYRO_MAX_DEG) * notes.length());
     if (section >= (int)notes.length())
-        section = (int)notes.length() - 1;  // clamp to valid index
+        section = (int)notes.length() - 1;  // limita ao índice válido
     if (section < 0) section = 0;
 
     byte currentNote = notes.empty() ? DEFAULT_NOTE : (byte)notes[section];
 
-    // Touch note logic
+    // Lógica de nota por toque
     if (touch) {
         if (!touchFlag) {
             playNote(currentNote);
@@ -363,7 +357,7 @@ void loop() {
         }
     }
 
-    // Accelerometer percussion logic
+    // Lógica de percussão por acelerômetro
     if (!accelFlag && abs(accel) > accelThreshold && (now - lastAccel) >= ACCEL_DEBOUNCE_MS) {
         Serial.printf("Accel trigger: value=%d threshold=%ld\n", accel, (long)accelThreshold);
         playNote(PERC_NOTE, PERC_CHANNEL);
@@ -375,7 +369,7 @@ void loop() {
         accelFlag = false;
     }
 
-    // Send status notification if a client is connected
+    // Envia notificação de status se um cliente estiver conectado
     if (pServer->getConnectedCount()) {
         statusPkt.gyro_x  = (int16_t)gyro;
         statusPkt.accel_x = (int16_t)accel;

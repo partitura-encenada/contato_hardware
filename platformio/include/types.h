@@ -2,14 +2,14 @@
 
 #include <cstdint>
 
-// Sent via BLE STATUS_CHAR notify every STATUS_INTERVAL_MS.
+// Enviado via notify em STATUS_CHAR a cada STATUS_INTERVAL_MS.
 struct __attribute__((packed)) StatusPacket {
-    int16_t gyro_x;   // Roll angle in degrees (clamped to ±GYRO_MAX_DEG)
-    int16_t accel_x;  // Linear X acceleration (raw IMU ÷ 10)
-    uint8_t touch;    // Touch sensor: 1 = active, 0 = released
+    int16_t gyro_x;   // Ângulo de rolagem em graus (limitado a ±GYRO_MAX_DEG)
+    int16_t accel_x;  // Aceleração linear no eixo X (unidade bruta IMU ÷ 10)
+    uint8_t touch;    // Sensor de toque: 1 = ativo, 0 = liberado
 };
 
-// MPU6050 offset registers stored in NVS for persistent calibration.
+// Registradores de offset do MPU6050 armazenados na NVS para calibração persistente.
 struct MPUOffsets {
     int16_t accelX, accelY, accelZ;
     int16_t gyroX,  gyroY,  gyroZ;

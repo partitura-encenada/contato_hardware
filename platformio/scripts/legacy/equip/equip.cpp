@@ -1,164 +1,66 @@
-// Bibliotecas
-#include "MPU6050_6Axis_MotionApps20.h"
 #include <esp_now.h>
 #include <WiFi.h>
-#include "Wire.h"
-#include "esp_wifi.h" 
+#include "esp_wifi.h"
 
+const int   CANAL_ESPECIFICO = 6;
 
-// Se quiser limitar a frequência de envio, descomente a linha abaixo
-#define FREQ_ENVIO 20 
-
-// Constantes e pseudo-constantes
-#define DEBUG
-// #define AUTO_CALLIBRATION
-const int   touch_sensitivity = 30;
-const int   callibration_time = 6;
-const int   CANAL_ESPECIFICO = 5;
-
-MPU6050 mpu;
-
-
-uint8_t     dev_status;      
-uint16_t    packet_size;   
-uint16_t    fifo_count;    
-uint8_t     fifo_buffer[64];
-Quaternion  q;              // [w, x, y, z]         Quaternion 
-VectorInt16 aa;             // [x, y, z]            Accel
-VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
-VectorFloat gravity;        // [x, y, z]            Gravidade
-bool        dmp_ready = false;  
-float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll        
-uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c};
-
-typedef struct { // Struct da mensagem, deve ser igual ao da base 
-    int id = 4;
-    int roll;
+// Estrutura de dados recebida (deve bater com o transmissor)
+typedef struct struct_message {
+    int id; 
+    int gyro;
     int accel;
     int touch;
-} message_t;
-message_t message;
-esp_now_peer_info_t peerInfo;
+} struct_message;
 
-// void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) { // Função callback de envio
+struct_message MIDImessage;
 
-// }
+// Callback de recepção
+void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
+    uint8_t macTransmissor[] = {0x94, 0x54, 0xc5, 0x6f, 0xa9, 0xa8}; // MAC do transmissor esperado
 
-#ifdef FREQ_ENVIO
-  const unsigned long intervaloEnvio = 1000 / FREQ_ENVIO;
-  unsigned long ultimoEnvio = 0;
-#endif
+    if (memcmp(mac_addr, macTransmissor, 6) != 0) {
+        return; // Ignora pacotes de outros dispositivos
+    }
 
-// Função para definir o canal
-esp_err_t setChannel(int channel) {
-  esp_wifi_set_promiscuous(true);  
-  esp_err_t result = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-  esp_wifi_set_promiscuous(false);
+    // Copia os dados recebidos para a struct
+    memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
 
-  #ifdef DEBUG
-    uint8_t primaryChan;
-    wifi_second_chan_t secondChan;
-    esp_wifi_get_channel(&primaryChan, &secondChan);
-    Serial.print("Canal real configurado: ");
-    Serial.println(primaryChan);
-  #endif
-
-  return result;
+    // Imprime imediatamente, sem controle de tempo
+    Serial.println(String(MIDImessage.id) + "/" +
+                   String(MIDImessage.gyro) + "/" +
+                   String(MIDImessage.accel) + "/" +
+                   String(MIDImessage.touch));
 }
 
 void setup() {
-    setCpuFrequencyMhz(80);
+    Serial.begin(115200);
 
-    Wire.begin();
-    Wire.setClock(400000); 
-    #ifdef DEBUG
-        Serial.begin(115200);
-    #endif
-    mpu.initialize();
-    #ifdef DEBUG
-        Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));  
-    #endif  
-
-    dev_status = mpu.dmpInitialize();
-    mpu.setDMPEnabled(true);       
-    #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1794); 
-        mpu.setXGyroOffset(44);    
-        mpu.setYGyroOffset(2);     
-        mpu.setZGyroOffset(-3);    
-    #endif
- 
-    if (dev_status == 0) {
-        #ifdef AUTO_CALLIBRATION
-            mpu.CalibrateAccel(callibration_time);
-            mpu.CalibrateGyro(callibration_time);
-            mpu.PrintActiveOffsets();
-        #endif
-        dmp_ready = true;
-        packet_size = mpu.dmpGetFIFOPacketSize();
-    } 
-    else {
-        Serial.print(F("DMP Initialization failed (code ")); // Erro
-        Serial.print(dev_status); // 1 = "initial memory load failed"; 2 = "DMP configuration updates failed"
-    }
-
-    // CONFIGURA WI-FI NO CANAL ESPECÍFICO
-    WiFi.mode(WIFI_STA);           
-    setChannel(CANAL_ESPECIFICO);
+    // Configura Wi-Fi como estação
+    WiFi.mode(WIFI_STA);
     esp_wifi_set_max_tx_power(82);
 
-    Serial.print("MAC deste dispositivo: ");
-    Serial.println(WiFi.macAddress());
+    // Fixa o canal no mesmo do transmissor
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_channel(CANAL_ESPECIFICO, WIFI_SECOND_CHAN_NONE); // Canal do transmissor
+    esp_wifi_set_promiscuous(false);
 
-    // Inicia o ESP-NOW
+    // Confirma canal em uso
+    uint8_t primaryChan;
+    wifi_second_chan_t secondChan;
+    esp_wifi_get_channel(&primaryChan, &secondChan);
+    Serial.print("Receptor no canal: ");
+    Serial.println(primaryChan);
+
+    // Inicia ESP-NOW
     if (esp_now_init() != ESP_OK) {
-        Serial.println("Error initializing ESP-NOW");
-        return;
-    }  
-    
-    // Configuração do peer
-    esp_now_peer_info_t peerInfo = {};
-    // esp_now_register_send_cb(OnDataSent); // Registro função callback de envio 
-    memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;      // usa o canal já configurado no Wi-Fi
-    peerInfo.encrypt = false;    
-    if (esp_now_add_peer(&peerInfo) != ESP_OK){
-        Serial.println("Failed to add peer");
+        Serial.println("Erro ao inicializar ESP-NOW");
         return;
     }
 
-    // Serial.println("Peer adicionado e ESP-NOW pronto!");
+    // Registra callback de recepção
+    esp_now_register_recv_cb(OnDataRecv);
 }
 
 void loop() {
- if (!dmp_ready) return;
-    if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) { 
-        mpu.dmpGetQuaternion(&q, fifo_buffer);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetAccel(&aa, fifo_buffer);
-        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-        // message.yaw =   ypr[0] * 180/M_PI;      // -180º >=     yaw     <= +180º
-        // message.pitch = ypr[1] * 180/M_PI;      // -180º >=     pitch   <= +180º
-        message.roll =  ypr[2] * 180/M_PI;      // -180º >=     roll    <= +180º
-        message.accel = aaReal.x;
-        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
-
-        // #ifdef DEBUG
-        //     Serial.print("Touch raw value: ");
-        //     Serial.println(touchRead(T3));
-        // #endif
-
-        #ifdef FREQ_ENVIO
-          unsigned long agora = millis();
-          if (agora - ultimoEnvio >= intervaloEnvio) {
-              ultimoEnvio = agora;
-              esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
-          }
-        #else
-          // Sem filtro → envia sempre
-          esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message));
-        #endif
-    }  
+    // Nada aqui: apenas recebe via callback
 }

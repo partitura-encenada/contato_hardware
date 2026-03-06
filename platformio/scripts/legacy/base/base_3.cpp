@@ -16,7 +16,7 @@ struct_message MIDImessage;
 
 // Callback de recepção
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
-    uint8_t macTransmissor[] = {0xf8, 0xb3, 0xb7, 0x50, 0xcc, 0xec}; // MAC do transmissor esperado
+    uint8_t macTransmissor[] = {0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4}; // MAC do equip (transmissor)
 
     if (memcmp(mac_addr, macTransmissor, 6) != 0) {
         return; // Ignora pacotes de outros dispositivos

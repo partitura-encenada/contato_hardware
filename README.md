@@ -49,5 +49,3 @@ platformio device monitor --speed 115200
 |---|---|
 | ESP32 DEVKIT V1 | Microcontrolador principal |
 | MPU6050 | IMU 6 eixos (I2C, 400 kHz) |
-| GPIO 2 | LED indicador de conexão BLE |
-| GPIO T3 | Sensor de toque capacitivo |

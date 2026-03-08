@@ -1,72 +1,106 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
-
-**Contato** is an ESP32 firmware for a wearable motion-to-MIDI device developed for the Dance Course at UFRJ. It reads 6-axis IMU data from an MPU6050, maps gyro roll angle and touch input to MIDI notes, and transmits MIDI messages over BLE using the standard MIDI over BLE protocol (Apple/MIDI Association spec).
+This file provides guidance to Claude Code when working with code in this repository.
 
 ## Build Commands
 
-All commands should be run from the `platformio/` directory:
+All commands run from the `platformio/` directory:
 
 ```bash
-# Build firmware
+# Build
 platformio run -e esp32doit-devkit-v1
 
-# Build and flash to device
+# Build and flash
 platformio run --target upload -e esp32doit-devkit-v1
 
-# Open serial monitor (115200 baud)
+# Serial monitor (115200 baud)
 platformio device monitor --speed 115200
 
 # Clean build artifacts
 platformio run --target clean
 ```
 
-PlatformIO can also be invoked via the VSCode PlatformIO extension (recommended for development).
+PlatformIO can also be used via the VSCode extension.
+
+## Project Layout
+
+`platformio/` is the active firmware. `arduino/` is legacy (ESP-NOW P2P) and unmaintained.
+
+```
+platformio/
+├── platformio.ini        # espressif32@6.11.0, esp32doit-devkit-v1
+├── src/main.cpp          # all firmware logic
+└── include/
+    ├── config.h          # pins, BLE UUIDs, timing constants, MIDI defaults
+    └── types.h           # StatusPacket, MPUOffsets structs
+```
 
 ## Architecture
 
-### Active Code
-The `platformio/` directory contains the active firmware. The `arduino/` directory is legacy code (ESP-NOW P2P implementations) and is not actively developed.
+Contato is a BLE MIDI peripheral. It reads motion from an MPU6050 IMU and maps it to MIDI events transmitted via BLE to a connected client (`contato_gui`).
 
-### Key Files
-- `platformio/src/main.cpp` — All firmware logic (~380 lines)
-- `platformio/include/config.h` — Pin assignments, BLE UUIDs, MIDI defaults, timing constants
-- `platformio/include/types.h` — `StatusPacket` and `MPUOffsets` structs
+### Data Flow (loop)
 
-### BLE Service Structure
-The device exposes a single BLE service (`03B80E5A...`) with these characteristics:
-- `MIDI_CHAR` — Sends MIDI Note-On/Note-Off messages with 13-bit BLE timestamps
-- `STATUS_CHAR` — Notifies clients with gyro angle, acceleration, and touch state
-- `SECTIONS_CHAR` — R/W array of MIDI notes mapped to gyro sections
-- `ACCEL_SENS_CHAR` — R/W percussion sensitivity threshold
-- `DIR_CHAR` — R/W gyro direction inversion flag
-- `CALIBRATE_CHAR` — Write-only trigger for MPU6050 calibration
+1. MPU6050 DMP outputs quaternion at ~333 Hz → converted to Euler angles
+2. Roll angle (±90°, clamped) maps to a section index into the notes array
+3. Capacitive touch (GPIO T3) → Note-On for current section's note on press, Note-Off on release; glides to new note if section changes while held
+4. Linear X-axis acceleration above `accelThreshold` → short percussion note (Note 36, ch 8) lasting `PERC_NOTE_MS`, gated by `ACCEL_DEBOUNCE_MS`
+5. STATUS_CHAR notified with gyro angle, raw accel, and touch state
 
-### Main Loop Data Flow
-1. MPU6050 DMP outputs quaternion → converted to Euler angles
-2. Roll angle (±89°) maps to a note index in the `sections[]` array (default: 6 equal sections)
-3. Touch sensor (GPIO T3, capacitive) triggers Note-On for the current section's note
-4. Linear acceleration on X-axis above `accelSens` threshold triggers a percussion note (ch. 8)
-5. Status is broadcast via `STATUS_CHAR` notify to connected clients
+### Calibration
 
-### Persistent Storage
-Uses the Arduino `Preferences` library (ESP32 NVS), namespace `"mpu"`:
-- `"offs"` — MPU6050 calibration offsets (`MPUOffsets` struct)
-- `"sections"` — MIDI note array
-- `"sens"` — Percussion acceleration threshold
-- `"dir"` — Gyro direction inversion flag
+`calibrateAndSave()`:
+- Sets LED HIGH to indicate activity
+- Disables DMP (required so raw sensor reads during calibration are clean)
+- Runs `CalibrateGyro(6)` and `CalibrateAccel(6)` from the MPU6050 library
+- Re-enables DMP
+- Saves offsets to NVS
 
-### Dependencies (platformio.ini)
-- `jrowberg/I2Cdevlib-MPU6050` — MPU6050 + DMP driver
-- `h2zero/NimBLE-Arduino` — Lightweight BLE stack (replaced the older BLE-MIDI library)
+Triggered two ways:
+- **First boot** (no offsets in NVS): runs inside `setup()` before BLE starts
+- **BLE write** to `CALIBRATE_CHAR`: sets `volatile bool calibrate_requested` flag, consumed at the top of `loop()` — never called from a BLE callback to avoid blocking the NimBLE task
 
-## Development Notes
+### BLE GATT Contract
 
-- The `claude` branch is the active development branch; `main` is stable.
-- BLE advertising must be restarted after client disconnect — this is handled in `ServerCallbacks::onDisconnect`.
-- The MPU6050 DMP runs at a fixed FIFO rate; the main loop polls every 3ms (`SENSOR_INTERVAL_MS` in config.h).
-- Calibration takes several seconds and blocks the loop; the LED blinks to indicate it is running.
-- Serial output at 115200 baud is the primary debugging tool — use `platformio device monitor`.
+Service UUID: `03B80E5A-EDE8-4B33-A751-6CE34EC4C700`
+
+| Characteristic | Properties | Wire format | Description |
+|---|---|---|---|
+| MIDI_CHAR | READ, WRITE_NR, NOTIFY | 5-byte Apple BLE MIDI | Note-On/Note-Off with 13-bit timestamp |
+| STATUS_CHAR | NOTIFY | `<hhB`: int16 gyro, int16 accel, uint8 touch | Sensor state ~333 Hz |
+| SECTIONS_CHAR | READ, WRITE | N bytes (1–8), each a MIDI note number | Note per gyro section |
+| ACCEL_SENS_CHAR | READ, WRITE | int16 on write, int32 on read | Percussion sensitivity threshold |
+| DIR_CHAR | READ, WRITE | uint8 (0 = normal, 1 = flip) | Gyro direction inversion |
+| CALIBRATE_CHAR | WRITE | any byte | Triggers MPU6050 calibration |
+
+### NVS (Preferences namespace `"mpu"`)
+
+| Key | Type | Description |
+|---|---|---|
+| `"offs"` | `MPUOffsets` struct (12 bytes) | Calibration offsets |
+| `"sections"` | bytes | MIDI note array (up to 8 bytes) |
+| `"sens"` | int32 | Acceleration threshold |
+| `"dir"` | uint8 | Direction inversion flag |
+
+Use `prefs.isKey()` before `prefs.getBytes()` to avoid NVS `NOT_FOUND` log errors on first boot.
+
+### Hardware
+
+| Component | Detail |
+|---|---|
+| MPU6050 | SDA=21, SCL=22 (ESP32 default I2C), 400 kHz |
+| LED | GPIO 2 — HIGH when client connected, HIGH during calibration |
+| Touch | GPIO T3, capacitive, threshold < 30 |
+
+## Dependencies
+
+- `jrowberg/I2Cdevlib-MPU6050` — MPU6050 + DMP driver (MotionApps 2.0)
+- `h2zero/NimBLE-Arduino` — Lightweight BLE stack for ESP32
+
+## Coding Conventions
+
+- No exception handling, no defensive fallbacks, no input validation on BLE writes
+- No bounds-checking beyond what is logically necessary (e.g. section index clamp)
+- No helper wrappers around single operations
+- Serial output at 115200 baud is the only debugging tool
+- Active branch: `claude`; stable branch: `main`

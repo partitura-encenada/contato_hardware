@@ -7,12 +7,12 @@ O dispositivo é baseado em um módulo **ESP32 DEVKIT V1** com um **IMU MPU6050*
 
 ## Como funciona
 
-- O ângulo de rolagem do giroscópio (±89°) determina qual nota MIDI está selecionada dentre as seções configuráveis.
-- O toque no sensor capacitivo dispara Note-On/Note-Off da nota selecionada.
-- Picos de aceleração no eixo X disparam uma nota de percussão (canal MIDI 8).
-- Toda a configuração (notas, sensibilidade, calibração) é persistida na memória não-volátil do ESP32 (NVS) e pode ser alterada pelo cliente BLE.
+- O ângulo de rolagem do giroscópio (±90°) determina qual nota MIDI está selecionada dentre as seções configuráveis.
+- O toque no sensor capacitivo dispara Note-On/Note-Off da nota selecionada. Manter o toque enquanto muda de seção desliza para a nova nota.
+- Picos de aceleração no eixo X disparam uma nota de percussão curta (MIDI 36, canal 8).
+- Toda a configuração (notas, sensibilidade, direção, calibração) é persistida na memória não-volátil do ESP32 (NVS) e pode ser alterada pelo cliente BLE.
 
-## 📁 Organização
+## Organização
 
 ```
 contato_hardware/
@@ -48,6 +48,10 @@ platformio device monitor --speed 115200
 | Componente | Descrição |
 |---|---|
 | ESP32 DEVKIT V1 | Microcontrolador principal |
-| MPU6050 | IMU 6 eixos (I2C, 400 kHz) |
-| GPIO 2 | LED indicador de conexão BLE |
+| MPU6050 | IMU 6 eixos (I2C, 400 kHz) — SDA=21, SCL=22 |
+| GPIO 2 | LED indicador (aceso = cliente conectado ou calibrando) |
 | GPIO T3 | Sensor de toque capacitivo |
+
+## Calibração
+
+Na primeira inicialização sem offsets salvos, o dispositivo calibra automaticamente o MPU6050 e salva os offsets na NVS. Recalibrações posteriores podem ser disparadas pelo botão "Calibrar" na interface do cliente BLE (`contato_gui`).

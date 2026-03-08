@@ -7,12 +7,12 @@ The device is built around an **ESP32 DEVKIT V1** and an **MPU6050 IMU** (6-axis
 
 ## How it works
 
-- The gyroscope roll angle (±89°) selects a MIDI note from a configurable set of sections.
-- Touching the capacitive sensor triggers Note-On/Note-Off for the currently selected note.
-- Acceleration spikes on the X-axis trigger a percussion note (MIDI channel 8).
-- All configuration (notes, sensitivity, calibration offsets) is persisted in the ESP32's non-volatile storage (NVS) and can be updated by a BLE client.
+- The gyroscope roll angle (±90°) selects a MIDI note from a configurable set of sections.
+- Touching the capacitive sensor triggers Note-On/Note-Off for the currently selected note. Holding touch while moving across sections glides to the new note.
+- Acceleration spikes on the X-axis trigger a short percussion note (MIDI 36, channel 8).
+- All configuration (notes, sensitivity, direction, calibration offsets) is persisted in the ESP32's non-volatile storage (NVS) and can be updated by a BLE client.
 
-## 📁 Structure
+## Structure
 
 ```
 contato_hardware/
@@ -48,6 +48,10 @@ platformio device monitor --speed 115200
 | Component | Description |
 |---|---|
 | ESP32 DEVKIT V1 | Main microcontroller |
-| MPU6050 | 6-axis IMU (I2C, 400 kHz) |
-| GPIO 2 | BLE connection indicator LED |
+| MPU6050 | 6-axis IMU (I2C, 400 kHz) — SDA=21, SCL=22 |
+| GPIO 2 | LED indicator (on = client connected or calibrating) |
 | GPIO T3 | Capacitive touch sensor |
+
+## Calibration
+
+On first boot with no saved offsets, the device calibrates the MPU6050 automatically and persists the offsets to NVS. Subsequent recalibrations can be triggered from the "Calibrar" button in the BLE client (`contato_gui`).

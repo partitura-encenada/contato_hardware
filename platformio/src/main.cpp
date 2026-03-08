@@ -95,9 +95,10 @@ static bool calibrateAndSaveOffsets() {
     Serial.println("Calibração concluída. Offsets:");
     printOffsets(offs);
 
-    // prefs.begin(PREF_NAMESPACE, false);
-    // size_t wrote = prefs.putBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets));
-    // prefs.end();
+    prefs.begin(PREF_NAMESPACE, false);
+    prefs.putBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets));
+    prefs.end();
+    Serial.println("Offsets salvos na NVS.");
     return true;
 }
 
@@ -122,9 +123,9 @@ class SectionsCharCallbacks : public NimBLECharacteristicCallbacks {
         for (unsigned char c : val)
             Serial.printf(" %u", (unsigned)c);
         Serial.println();
-        // prefs.begin(PREF_NAMESPACE, false);
-        // prefs.putBytes(PREF_KEY_SECTIONS, val.data(), val.size());
-        // prefs.end();
+        prefs.begin(PREF_NAMESPACE, false);
+        prefs.putBytes(PREF_KEY_SECTIONS, val.data(), val.size());
+        prefs.end();
     }
 };
 
@@ -140,9 +141,9 @@ class DirCharCallbacks : public NimBLECharacteristicCallbacks {
         std::string v = pChar->getValue();
         if (v.size() < 1) return;
         uint8_t b = (uint8_t)v[0];
-        // prefs.begin(PREF_NAMESPACE, false);
-        // prefs.putUChar(PREF_KEY_DIR, b);
-        // prefs.end();
+        prefs.begin(PREF_NAMESPACE, false);
+        prefs.putUChar(PREF_KEY_DIR, b);
+        prefs.end();
         Serial.printf("DIR recebido: %u → flip_gyro=%s\n",
                       (unsigned)b, b ? "true" : "false");
     }
@@ -151,22 +152,14 @@ class DirCharCallbacks : public NimBLECharacteristicCallbacks {
 class AccelSensCharCallbacks : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
         std::string val = pChar->getValue();
-        if (val.size() != 2) {
-            Serial.println("Escrita em accel sens com tamanho inesperado.");
-            return;
-        }
         int16_t received = 0;
         memcpy(&received, val.data(), sizeof(int16_t));
-        if (received < MIN_ACCEL_THRESHOLD || received > MAX_ACCEL_THRESHOLD) {
-            Serial.printf("Accel threshold fora do intervalo válido: %d\n", (int)received);
-            return;
-        }
         accelThreshold = (int32_t)received;
-        pAccelSensChar->setValue((uint8_t *)&accelThreshold, sizeof(int32_t));
-        // prefs.begin(PREF_NAMESPACE, false);
-        // prefs.putInt(PREF_KEY_SENS, accelThreshold);
-        // prefs.end();
-        Serial.printf("Novo accel threshold recebido: %ld\n", (long)accelThreshold);
+        pAccelSensChar->setValue(accelThreshold);
+        prefs.begin(PREF_NAMESPACE, false);
+        prefs.putInt(PREF_KEY_SENS, accelThreshold);
+        prefs.end();
+        Serial.printf("Accel threshold recebido: %ld\n", (long)accelThreshold);
     }
 };
 
@@ -202,51 +195,43 @@ void setup() {
     mpu.setDMPEnabled(true);
     Serial.println("DMP inicializado e ativado.");
 
-    // ── Limpa a NVS (memória persistente) ────────────────────────────────────
-    prefs.begin(PREF_NAMESPACE, false);
-    prefs.clear();
+    // ── Carrega configurações persistidas na NVS ──────────────────────────────
+    prefs.begin(PREF_NAMESPACE, true);
+
+    MPUOffsets offsets;
+    bool have_offsets = prefs.getBytes(PREF_KEY_OFFS, &offsets, sizeof(MPUOffsets)) == sizeof(MPUOffsets);
+    if (have_offsets) {
+        mpu.setXAccelOffset(offsets.accelX);
+        mpu.setYAccelOffset(offsets.accelY);
+        mpu.setZAccelOffset(offsets.accelZ);
+        mpu.setXGyroOffset(offsets.gyroX);
+        mpu.setYGyroOffset(offsets.gyroY);
+        mpu.setZGyroOffset(offsets.gyroZ);
+        Serial.println("Offsets carregados e aplicados:");
+        printOffsets(offsets);
+    }
+
+    accelThreshold = prefs.getInt(PREF_KEY_SENS, DEFAULT_ACCEL_THRESHOLD);
+    Serial.printf("Accel threshold carregado da NVS: %ld\n", (long)accelThreshold);
+
+    uint8_t stored_dir = prefs.getUChar(PREF_KEY_DIR, 1);
+
+    std::string saved_sections;
+    size_t sections_size = prefs.getBytes(PREF_KEY_SECTIONS, nullptr, 0);
+    if (sections_size > 0) {
+        std::vector<char> buf(sections_size);
+        prefs.getBytes(PREF_KEY_SECTIONS, buf.data(), sections_size);
+        saved_sections.assign(buf.begin(), buf.end());
+    }
+
     prefs.end();
-    Serial.println("NVS limpa.");
     // ─────────────────────────────────────────────────────────────────────────
 
-    // // ── Carrega todas as configurações persistidas em uma sessão NVS ──
-    // prefs.begin(PREF_NAMESPACE, true);
-
-    // MPUOffsets offsets;
-    // bool have_offsets = prefs.getBytes(PREF_KEY_OFFS, &offsets, sizeof(MPUOffsets)) == sizeof(MPUOffsets);
-    // if (have_offsets) {
-    //     mpu.setXAccelOffset(offsets.accelX);
-    //     mpu.setYAccelOffset(offsets.accelY);
-    //     mpu.setZAccelOffset(offsets.accelZ);
-    //     mpu.setXGyroOffset(offsets.gyroX);
-    //     mpu.setYGyroOffset(offsets.gyroY);
-    //     mpu.setZGyroOffset(offsets.gyroZ);
-    //     Serial.println("Offsets carregados e aplicados:");
-    //     printOffsets(offsets);
-    // }
-
-    // accelThreshold = prefs.getInt(PREF_KEY_SENS, DEFAULT_ACCEL_THRESHOLD);
-    // Serial.printf("Accel threshold carregado da NVS: %ld\n", (long)accelThreshold);
-
-    // uint8_t stored_dir = prefs.getUChar(PREF_KEY_DIR, 1);
-
-    // std::string saved_sections;
-    // size_t sections_size = prefs.getBytes(PREF_KEY_SECTIONS, nullptr, 0);
-    // if (sections_size > 0) {
-    //     std::vector<char> buf(sections_size);
-    //     prefs.getBytes(PREF_KEY_SECTIONS, buf.data(), sections_size);
-    //     saved_sections.assign(buf.begin(), buf.end());
-    // }
-
-    // prefs.end();
-    // // ── Fim da sessão NVS ──
-
-    uint8_t stored_dir = 1;
-    std::string saved_sections;
-
-    Serial.println("Nenhum offset salvo; calibrando agora...");
-    mpu.CalibrateGyro(6);
-    mpu.CalibrateAccel(6);
+    if (!have_offsets) {
+        Serial.println("Nenhum offset salvo; calibrando agora...");
+        mpu.CalibrateGyro(6);
+        mpu.CalibrateAccel(6);
+    }
 
     // ── Configuração BLE ──
     NimBLEDevice::init(DEVICE_NAME);
@@ -296,7 +281,7 @@ void setup() {
         pSectionsChar->setValue(def);
     }
 
-    pAccelSensChar->setValue((uint8_t *)&accelThreshold, sizeof(int32_t));
+    pAccelSensChar->setValue(accelThreshold);
     pDirChar->setValue(stored_dir != 0);
 
     Serial.println("Anúncio BLE iniciado");

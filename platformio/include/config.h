@@ -52,6 +52,3 @@ static const uint8_t PERC_CHANNEL = 8;
 // Limiar padrão do acelerômetro (unidade bruta IMU eixo X ÷ 10) para disparar percussão.
 static const int32_t DEFAULT_ACCEL_THRESHOLD = 1250;
 
-// Intervalo válido do limiar do acelerômetro configurável via BLE.
-static const int32_t MIN_ACCEL_THRESHOLD = 100;
-static const int32_t MAX_ACCEL_THRESHOLD = 32767;

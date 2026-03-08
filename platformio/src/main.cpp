@@ -28,7 +28,7 @@ Quaternion  q;
 VectorInt16 aa;
 VectorInt16 aaReal;
 VectorFloat gravity;
-float       ypr[3];       // [yaw, pitch, roll] — guinada, arfagem, rolagem
+float       ypr[3];       // [yaw, pitch, roll] 
 bool        dmp_ready = false;
 
 int32_t          accelThreshold     = DEFAULT_ACCEL_THRESHOLD;
@@ -48,7 +48,6 @@ static float clamp(float v, float max_v, float min_v) {
 }
 
 // Pacote BLE MIDI: cabeçalho de timestamp de 2 bytes + status MIDI + bytes de dados.
-// Timestamp derivado de millis(); 6 bits altos no cabeçalho, 7 bits baixos no byte ts.
 static void sendMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     if (!pServer || !pServer->getConnectedCount()) return;
     uint16_t ts = (uint16_t)millis();
@@ -78,8 +77,8 @@ static void printOffsets(const MPUOffsets &o) {
     Serial.printf("Offsets do giroscópio:   X=%d Y=%d Z=%d\n", o.gyroX,  o.gyroY,  o.gyroZ);
 }
 
-// Executa a calibração do MPU e salva os offsets na NVS. Retorna true em caso de sucesso.
-static bool calibrateAndSaveOffsets() {
+// Executa a calibração do MPU e salva os offsets na NVS.
+static void calibrateAndSaveOffsets() {
     Serial.println("Iniciando calibração");
     mpu.CalibrateGyro(6);
     mpu.CalibrateAccel(6);
@@ -99,7 +98,6 @@ static bool calibrateAndSaveOffsets() {
     prefs.putBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets));
     prefs.end();
     Serial.println("Offsets salvos na NVS.");
-    return true;
 }
 
 // ─── Callbacks BLE ───────────────────────────────────────────────────────────
@@ -139,7 +137,6 @@ class NotifyCharCallbacks : public NimBLECharacteristicCallbacks {
 class DirCharCallbacks : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
         std::string v = pChar->getValue();
-        if (v.size() < 1) return;
         uint8_t b = (uint8_t)v[0];
         prefs.begin(PREF_NAMESPACE, false);
         prefs.putUChar(PREF_KEY_DIR, b);
@@ -187,11 +184,7 @@ void setup() {
         ? "Conexão com MPU bem-sucedida"
         : "Conexão com MPU FALHOU");
 
-    uint8_t dev_status = mpu.dmpInitialize();
-    if (dev_status != 0) {
-        Serial.printf("Falha ao inicializar DMP (status=%u)\n", dev_status);
-        return;
-    }
+    mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
     Serial.println("DMP inicializado e ativado.");
 
@@ -199,8 +192,9 @@ void setup() {
     prefs.begin(PREF_NAMESPACE, true);
 
     MPUOffsets offsets;
-    bool have_offsets = prefs.getBytes(PREF_KEY_OFFS, &offsets, sizeof(MPUOffsets)) == sizeof(MPUOffsets);
+    bool have_offsets = prefs.isKey(PREF_KEY_OFFS);
     if (have_offsets) {
+        prefs.getBytes(PREF_KEY_OFFS, &offsets, sizeof(MPUOffsets));
         mpu.setXAccelOffset(offsets.accelX);
         mpu.setYAccelOffset(offsets.accelY);
         mpu.setZAccelOffset(offsets.accelZ);
@@ -216,13 +210,11 @@ void setup() {
 
     uint8_t stored_dir = prefs.getUChar(PREF_KEY_DIR, 1);
 
-    std::string saved_sections;
-    size_t sections_size = prefs.getBytes(PREF_KEY_SECTIONS, nullptr, 0);
-    if (sections_size > 0) {
-        std::vector<char> buf(sections_size);
-        prefs.getBytes(PREF_KEY_SECTIONS, buf.data(), sections_size);
-        saved_sections.assign(buf.begin(), buf.end());
-    }
+    uint8_t sec_buf[8];
+    size_t sections_size = prefs.isKey(PREF_KEY_SECTIONS)
+        ? prefs.getBytes(PREF_KEY_SECTIONS, sec_buf, sizeof(sec_buf))
+        : 0;
+    std::string saved_sections((char *)sec_buf, sections_size);
 
     prefs.end();
     // ─────────────────────────────────────────────────────────────────────────
@@ -324,11 +316,8 @@ void loop() {
     // Mapeia a posição do giroscópio para índice de nota no array configurado
     std::string notes = pSectionsChar->getValue();
     int section = (int)((-gyro + GYRO_MAX_DEG) / (2.0f * GYRO_MAX_DEG) * notes.length());
-    if (section >= (int)notes.length())
-        section = (int)notes.length() - 1;  // limita ao índice válido
-    if (section < 0) section = 0;
 
-    byte currentNote = notes.empty() ? DEFAULT_NOTE : (byte)notes[section];
+    byte currentNote = (byte)notes[section];
 
     // Lógica de nota por toque
     if (touch) {

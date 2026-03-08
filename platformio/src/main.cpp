@@ -31,12 +31,13 @@ VectorFloat gravity;
 float       ypr[3];       // [yaw, pitch, roll] — guinada, arfagem, rolagem
 bool        dmp_ready = false;
 
-int32_t       accelThreshold = DEFAULT_ACCEL_THRESHOLD;
-unsigned long lastSent       = 0;
-unsigned long lastAccel      = 0;
-bool          touchFlag      = false;
-bool          accelFlag      = false;
-byte          lastNote       = 0;
+int32_t          accelThreshold     = DEFAULT_ACCEL_THRESHOLD;
+unsigned long    lastSent           = 0;
+unsigned long    lastAccel          = 0;
+bool             touchFlag          = false;
+bool             accelFlag          = false;
+byte             lastNote           = 0;
+volatile bool    calibrate_requested = false;
 
 // ─── Auxiliares ──────────────────────────────────────────────────────────────
 
@@ -94,17 +95,10 @@ static bool calibrateAndSaveOffsets() {
     Serial.println("Calibração concluída. Offsets:");
     printOffsets(offs);
 
-    prefs.begin(PREF_NAMESPACE, false);
-    size_t wrote = prefs.putBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets));
-    prefs.end();  // sempre fecha, independente do resultado
-
-    if (wrote == sizeof(MPUOffsets)) {
-        Serial.println("Offsets salvos na NVS.");
-        return true;
-    }
-    Serial.printf("ERRO salvando offsets: escreveu %u de %u bytes\n",
-                  (unsigned)wrote, (unsigned)sizeof(MPUOffsets));
-    return false;
+    // prefs.begin(PREF_NAMESPACE, false);
+    // size_t wrote = prefs.putBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets));
+    // prefs.end();
+    return true;
 }
 
 // ─── Callbacks BLE ───────────────────────────────────────────────────────────
@@ -128,10 +122,9 @@ class SectionsCharCallbacks : public NimBLECharacteristicCallbacks {
         for (unsigned char c : val)
             Serial.printf(" %u", (unsigned)c);
         Serial.println();
-        prefs.begin(PREF_NAMESPACE, false);
-        prefs.putBytes(PREF_KEY_SECTIONS, val.data(), val.size());
-        prefs.end();
-        Serial.println("SECTIONS salvo na NVS.");
+        // prefs.begin(PREF_NAMESPACE, false);
+        // prefs.putBytes(PREF_KEY_SECTIONS, val.data(), val.size());
+        // prefs.end();
     }
 };
 
@@ -147,10 +140,10 @@ class DirCharCallbacks : public NimBLECharacteristicCallbacks {
         std::string v = pChar->getValue();
         if (v.size() < 1) return;
         uint8_t b = (uint8_t)v[0];
-        prefs.begin(PREF_NAMESPACE, false);
-        prefs.putUChar(PREF_KEY_DIR, b);
-        prefs.end();
-        Serial.printf("DIR recebido: %u → flip_gyro=%s (salvo)\n",
+        // prefs.begin(PREF_NAMESPACE, false);
+        // prefs.putUChar(PREF_KEY_DIR, b);
+        // prefs.end();
+        Serial.printf("DIR recebido: %u → flip_gyro=%s\n",
                       (unsigned)b, b ? "true" : "false");
     }
 };
@@ -169,16 +162,17 @@ class AccelSensCharCallbacks : public NimBLECharacteristicCallbacks {
             return;
         }
         accelThreshold = (int32_t)received;
-        prefs.begin(PREF_NAMESPACE, false);
-        prefs.putInt(PREF_KEY_SENS, accelThreshold);
-        prefs.end();
-        Serial.printf("Novo accel threshold recebido: %ld (salvo)\n", (long)accelThreshold);
+        pAccelSensChar->setValue((uint8_t *)&accelThreshold, sizeof(int32_t));
+        // prefs.begin(PREF_NAMESPACE, false);
+        // prefs.putInt(PREF_KEY_SENS, accelThreshold);
+        // prefs.end();
+        Serial.printf("Novo accel threshold recebido: %ld\n", (long)accelThreshold);
     }
 };
 
 class CalibrateCharCallbacks : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *, NimBLEConnInfo &) override {
-        calibrateAndSaveOffsets();
+        calibrate_requested = true;
     }
 };
 
@@ -208,45 +202,51 @@ void setup() {
     mpu.setDMPEnabled(true);
     Serial.println("DMP inicializado e ativado.");
 
-    // ── Carrega todas as configurações persistidas em uma sessão NVS ──
-    prefs.begin(PREF_NAMESPACE, true);
-
-    MPUOffsets offsets;
-    bool have_offsets = prefs.getBytes(PREF_KEY_OFFS, &offsets, sizeof(MPUOffsets)) == sizeof(MPUOffsets);
-    if (have_offsets) {
-        mpu.setXAccelOffset(offsets.accelX);
-        mpu.setYAccelOffset(offsets.accelY);
-        mpu.setZAccelOffset(offsets.accelZ);
-        mpu.setXGyroOffset(offsets.gyroX);
-        mpu.setYGyroOffset(offsets.gyroY);
-        mpu.setZGyroOffset(offsets.gyroZ);
-        Serial.println("Offsets carregados e aplicados:");
-        printOffsets(offsets);
-    }
-
-    accelThreshold = prefs.getInt(PREF_KEY_SENS, DEFAULT_ACCEL_THRESHOLD);
-    Serial.printf("Accel threshold carregado da NVS: %ld\n", (long)accelThreshold);
-
-    uint8_t stored_dir = prefs.getUChar(PREF_KEY_DIR, 1);
-
-    std::string saved_sections;
-    size_t sections_size = prefs.getBytes(PREF_KEY_SECTIONS, nullptr, 0);
-    if (sections_size > 0) {
-        std::vector<char> buf(sections_size);
-        prefs.getBytes(PREF_KEY_SECTIONS, buf.data(), sections_size);
-        saved_sections.assign(buf.begin(), buf.end());
-    }
-
+    // ── Limpa a NVS (memória persistente) ────────────────────────────────────
+    prefs.begin(PREF_NAMESPACE, false);
+    prefs.clear();
     prefs.end();
-    // ── Fim da sessão NVS ──
+    Serial.println("NVS limpa.");
+    // ─────────────────────────────────────────────────────────────────────────
 
-    // Executa calibração do MPU apenas se não houver offsets salvos.
-    // Ignorar quando offsets são carregados evita sobrescrever valores conhecidos como bons.
-    if (!have_offsets) {
-        Serial.println("Nenhum offset salvo; calibrando agora...");
-        mpu.CalibrateGyro(6);
-        mpu.CalibrateAccel(6);
-    }
+    // // ── Carrega todas as configurações persistidas em uma sessão NVS ──
+    // prefs.begin(PREF_NAMESPACE, true);
+
+    // MPUOffsets offsets;
+    // bool have_offsets = prefs.getBytes(PREF_KEY_OFFS, &offsets, sizeof(MPUOffsets)) == sizeof(MPUOffsets);
+    // if (have_offsets) {
+    //     mpu.setXAccelOffset(offsets.accelX);
+    //     mpu.setYAccelOffset(offsets.accelY);
+    //     mpu.setZAccelOffset(offsets.accelZ);
+    //     mpu.setXGyroOffset(offsets.gyroX);
+    //     mpu.setYGyroOffset(offsets.gyroY);
+    //     mpu.setZGyroOffset(offsets.gyroZ);
+    //     Serial.println("Offsets carregados e aplicados:");
+    //     printOffsets(offsets);
+    // }
+
+    // accelThreshold = prefs.getInt(PREF_KEY_SENS, DEFAULT_ACCEL_THRESHOLD);
+    // Serial.printf("Accel threshold carregado da NVS: %ld\n", (long)accelThreshold);
+
+    // uint8_t stored_dir = prefs.getUChar(PREF_KEY_DIR, 1);
+
+    // std::string saved_sections;
+    // size_t sections_size = prefs.getBytes(PREF_KEY_SECTIONS, nullptr, 0);
+    // if (sections_size > 0) {
+    //     std::vector<char> buf(sections_size);
+    //     prefs.getBytes(PREF_KEY_SECTIONS, buf.data(), sections_size);
+    //     saved_sections.assign(buf.begin(), buf.end());
+    // }
+
+    // prefs.end();
+    // // ── Fim da sessão NVS ──
+
+    uint8_t stored_dir = 1;
+    std::string saved_sections;
+
+    Serial.println("Nenhum offset salvo; calibrando agora...");
+    mpu.CalibrateGyro(6);
+    mpu.CalibrateAccel(6);
 
     // ── Configuração BLE ──
     NimBLEDevice::init(DEVICE_NAME);
@@ -296,6 +296,7 @@ void setup() {
         pSectionsChar->setValue(def);
     }
 
+    pAccelSensChar->setValue((uint8_t *)&accelThreshold, sizeof(int32_t));
     pDirChar->setValue(stored_dir != 0);
 
     Serial.println("Anúncio BLE iniciado");
@@ -306,6 +307,11 @@ void setup() {
 
 void loop() {
     if (!dmp_ready) return;
+
+    if (calibrate_requested) {
+        calibrate_requested = false;
+        calibrateAndSaveOffsets();
+    }
 
     unsigned long now = millis();
     if (now - lastSent < STATUS_INTERVAL_MS) return;
@@ -347,7 +353,7 @@ void loop() {
         }
         if (currentNote != lastNote) {
             stopNote(lastNote);
-            vTaskDelay(10);
+            delay(10);
             playNote(currentNote);
         }
     } else {
@@ -376,6 +382,5 @@ void loop() {
         statusPkt.touch   = (uint8_t)touch;
         pStatusChar->setValue((uint8_t *)&statusPkt, sizeof(StatusPacket));
         pStatusChar->notify();
-        delay(10);
     }
 }

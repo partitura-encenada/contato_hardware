@@ -80,8 +80,10 @@ static void printOffsets(const MPUOffsets &o) {
 // Executa a calibração do MPU e salva os offsets na NVS.
 static void calibrateAndSaveOffsets() {
     Serial.println("Iniciando calibração");
+    mpu.setDMPEnabled(false);
     mpu.CalibrateGyro(6);
     mpu.CalibrateAccel(6);
+    mpu.setDMPEnabled(true);
 
     MPUOffsets offs;
     offs.accelX = mpu.getXAccelOffset();
@@ -221,8 +223,7 @@ void setup() {
 
     if (!have_offsets) {
         Serial.println("Nenhum offset salvo; calibrando agora...");
-        mpu.CalibrateGyro(6);
-        mpu.CalibrateAccel(6);
+        calibrateAndSaveOffsets();
     }
 
     // ── Configuração BLE ──
@@ -302,11 +303,11 @@ void loop() {
     mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
     mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
 
-    // Mapeia o ângulo de rolagem [-89°, +89°] para seleção de nota
+    // Mapeia o ângulo de rolagem [-90°, +90°] para seleção de nota
     int gyro = (int)(ypr[2] * -180.0f / M_PI);
     gyro = (int)clamp((float)gyro, GYRO_MAX_DEG, -GYRO_MAX_DEG);
 
-    // Inverte direção opcionalmente (configurado via BLE)
+    // Inverte direção (configurado via BLE)
     std::string dir = pDirChar->getValue();
     if (dir.size() >= 1 && (bool)dir[0]) gyro = -gyro;
 

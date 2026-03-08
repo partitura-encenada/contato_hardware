@@ -38,7 +38,7 @@ static const unsigned long ACCEL_DEBOUNCE_MS = 2000;
 
 // ─── Sensor ──────────────────────────────────────────────────────────────────
 // Ângulo de rolagem limitado a ±GYRO_MAX_DEG para evitar instabilidade próxima à vertical.
-static const float GYRO_MAX_DEG = 89.0f;
+static const float GYRO_MAX_DEG = 90.0f;
 
 // ─── Padrões musicais ────────────────────────────────────────────────────────
 // Usados quando nenhuma seção de notas foi salva na NVS ainda.

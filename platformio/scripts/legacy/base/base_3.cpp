@@ -26,7 +26,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
 
     // Imprime imediatamente, sem controle de tempo
-    Serial.println(String(MIDImessage.id) + "/" +
+    Serial.println("D/" + String(MIDImessage.id) + "/" +
                    String(MIDImessage.gyro) + "/" +
                    String(MIDImessage.accel) + "/" +
                    String(MIDImessage.touch));

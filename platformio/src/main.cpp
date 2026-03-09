@@ -262,6 +262,11 @@ void loop() {
 
     if (calibrate_requested) {
         calibrate_requested = false;
+        if (pServer->getConnectedCount()) {
+            StatusPacket pkt = { 1, 0, 0, 0 };
+            pStatusChar->setValue((uint8_t *)&pkt, sizeof(StatusPacket));
+            pStatusChar->notify();
+        }
         calibrateAndSave();
     }
 
@@ -326,7 +331,7 @@ void loop() {
 
     // ── Status notify ─────────────────────────────────────────────────────────
     if (pServer->getConnectedCount()) {
-        StatusPacket pkt = { (int16_t)gyro, (int16_t)accel, (uint8_t)touch };
+        StatusPacket pkt = { 0, (uint8_t)touch, (int16_t)gyro, (int16_t)accel };
         pStatusChar->setValue((uint8_t *)&pkt, sizeof(StatusPacket));
         pStatusChar->notify();
     }

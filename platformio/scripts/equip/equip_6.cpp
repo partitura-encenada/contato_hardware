@@ -13,8 +13,8 @@
 
 
 // Constantes e pseudo-constantes
-const int   ID = 3;
-const int   CANAL_ESPECIFICO = 1;
+const int   ID = 6;
+const int   CANAL_ESPECIFICO = 13;
 const int   delay_time = 10;
 const int   touch_sensitivity = 20;  
 const int   callibration_time = 6; 
@@ -32,7 +32,7 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; // MAC da base (receptor)
+uint8_t     broadcastAddress[] = {0x14, 0x33, 0x5C, 0x30, 0x2B, 0x58}; // MAC da base (receptor)
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
     int id = ID;

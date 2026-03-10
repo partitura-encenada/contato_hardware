@@ -6,15 +6,19 @@
 #include "esp_wifi.h" 
 
 
-#define USE_DELAY   // Comente esta linha para desativar o delay
+// Defines --- comente para desativar
 #define DEBUG
+#define USE_DELAY   
 // #define AUTO_CALLIBRATION
 
+
 // Constantes e pseudo-constantes
+const int   ID = 5;
+const int   CANAL_ESPECIFICO = 9;
 const int   delay_time = 10;
 const int   touch_sensitivity = 20;  
-const int   callibration_time = 6;  
-const int   CANAL_ESPECIFICO = 10;
+const int   callibration_time = 6; 
+
 
 MPU6050 mpu;
 
@@ -28,11 +32,11 @@ VectorInt16 aaReal;         // [x, y, z]            Accel sem gravidade
 VectorFloat gravity;        // [x, y, z]            Gravidade
 bool        dmp_ready = false;  
 float       ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll
-uint8_t     broadcastAddress[] = {0xb0, 0xa7, 0x32, 0xd7, 0x58, 0x7c}; 
+uint8_t     broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; // MAC da base (receptor)
 
 typedef struct { // Struct da mensagem, deve ser igual ao da base 
-    int id = 4;
-    int roll;
+    int id = ID;
+    int gyro;
     int accel;
     int touch;
 } message_t;
@@ -50,7 +54,7 @@ esp_err_t setChannel(int channel) {
     uint8_t primaryChan;
     wifi_second_chan_t secondChan;
     esp_wifi_get_channel(&primaryChan, &secondChan);
-    Serial.print("Canal configurado: ");
+    Serial.print("Canal real configurado: ");
     Serial.println(primaryChan);
   #endif
 
@@ -74,10 +78,10 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);       
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1316);
-        mpu.setXGyroOffset(47);    
-        mpu.setYGyroOffset(-12);    
-        mpu.setZGyroOffset(-7);   
+        mpu.setZAccelOffset(1982);
+        mpu.setXGyroOffset(-2);    
+        mpu.setYGyroOffset(23);    
+        mpu.setZGyroOffset(-36);  
     #endif
  
     if (dev_status == 0) { // Sucesso
@@ -139,14 +143,14 @@ void loop() {
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
         // message.yaw =   ypr[0] * 180/M_PI;      // -180º >=     yaw     <= +180º
         // message.pitch = ypr[1] * 180/M_PI;      // -180º >=     pitch   <= +180º
-        message.roll =  ypr[2] * 180/M_PI;      // -180º >=     roll    <= +180º
+        message.gyro =  ypr[2] * 180/M_PI;      // -180º >=     roll    <= +180º
         message.accel = aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
 
-        // #ifdef DEBUG
-        //     Serial.print("Touch raw value: ");
-        //     Serial.println(touchRead(T3));
-        // #endif
+        #ifdef DEBUG
+            Serial.print("Touch raw value: ");
+            Serial.println(touchRead(T3));
+        #endif
 
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 
 

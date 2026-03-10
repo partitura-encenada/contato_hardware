@@ -2,7 +2,7 @@
 #include <WiFi.h>
 #include "esp_wifi.h"
 
-const int   CANAL_ESPECIFICO = 5;
+const int   CANAL_ESPECIFICO = 3;
 
 // Estrutura de dados recebida (deve bater com o transmissor)
 typedef struct struct_message {
@@ -16,7 +16,7 @@ struct_message MIDImessage;
 
 // Callback de recepção
 void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) {
-    uint8_t macTransmissor[] = {0x3c, 0x8a, 0x1f, 0xa2, 0x8D, 0x70}; // MAC do transmissor esperado
+    uint8_t macTransmissor[] = {0x14, 0x33, 0x5C, 0x2E, 0x12, 0xC8}; // MAC do equip (transmissor)
 
     if (memcmp(mac_addr, macTransmissor, 6) != 0) {
         return; // Ignora pacotes de outros dispositivos
@@ -26,7 +26,7 @@ void OnDataRecv(const uint8_t * mac_addr, const uint8_t *incomingData, int len) 
     memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
 
     // Imprime imediatamente, sem controle de tempo
-    Serial.println(String(MIDImessage.id) + "/" +
+    Serial.println("D/" + String(MIDImessage.id) + "/" +
                    String(MIDImessage.gyro) + "/" +
                    String(MIDImessage.accel) + "/" +
                    String(MIDImessage.touch));

@@ -19,6 +19,7 @@ NimBLECharacteristic       *pAccelSensChar = nullptr;
 NimBLECharacteristic       *pDirChar       = nullptr;
 NimBLECharacteristic       *pCalibrateChar = nullptr;
 NimBLECharacteristic       *pTiltChar      = nullptr;
+NimBLECharacteristic       *pLegatoChar    = nullptr;
 
 MPU6050     mpu;
 uint8_t     fifo_buffer[64];
@@ -37,6 +38,8 @@ bool          accelFlag           = false;
 byte          lastNote            = 0;
 volatile bool calibrate_requested = false;
 bool          tiltEnabled         = false;
+bool          legatoEnabled       = false;
+bool          legatoActive        = false;
 
 // ─── MIDI helpers ─────────────────────────────────────────────────────────────
 
@@ -66,7 +69,15 @@ static void noteOff(byte note, uint8_t ch = 1) {
 static void pitchBend(int degrees, uint8_t ch = 1) {
     if (degrees >  90) degrees =  90;
     if (degrees < -90) degrees = -90;
-    int bend = (int)((degrees + 90) / 180.0f * 16383.0f);
+    int bend;
+    if (degrees > 10)
+        bend = 8191 + (int)((degrees - 10) / 80.0f * 8192.0f);
+    else if (degrees < -10)
+        bend = 8191 + (int)((degrees + 10) / 80.0f * 8192.0f);
+    else
+        bend = 8191;
+    if (bend > 16383) bend = 16383;
+    if (bend < 0)     bend = 0;
     sendMidi(0xE0 | ((ch - 1) & 0x0F), bend & 0x7F, (bend >> 7) & 0x7F);
 }
 
@@ -163,6 +174,17 @@ class TiltCallbacks : public NimBLECharacteristicCallbacks {
     }
 };
 
+class LegatoCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
+        std::string v = pChar->getValue();
+        legatoEnabled = v.size() >= 1 && v[0] != 0;
+        prefs.begin(PREF_NAMESPACE, false);
+        prefs.putUChar(PREF_KEY_LEGATO, legatoEnabled ? 1 : 0);
+        prefs.end();
+        Serial.printf("Legato: %s\n", legatoEnabled ? "on" : "off");
+    }
+};
+
 class CalibrateCallbacks : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *, NimBLEConnInfo &connInfo) override {
         calibrate_requested = true;
@@ -207,9 +229,11 @@ void setup() {
 
     accelThreshold = prefs.getInt(PREF_KEY_SENS, DEFAULT_ACCEL_THRESHOLD);
 
-    uint8_t stored_dir  = prefs.getUChar(PREF_KEY_DIR,  0);
-    uint8_t stored_tilt = prefs.getUChar(PREF_KEY_TILT, 0);
-    tiltEnabled = stored_tilt != 0;
+    uint8_t stored_dir    = prefs.getUChar(PREF_KEY_DIR,    0);
+    uint8_t stored_tilt   = prefs.getUChar(PREF_KEY_TILT,   0);
+    uint8_t stored_legato = prefs.getUChar(PREF_KEY_LEGATO, 0);
+    tiltEnabled   = stored_tilt   != 0;
+    legatoEnabled = stored_legato != 0;
 
     uint8_t sec_buf[8];
     size_t sections_size = prefs.isKey(PREF_KEY_SECTIONS)
@@ -259,6 +283,10 @@ void setup() {
         TILT_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
     pTiltChar->setCallbacks(new TiltCallbacks());
 
+    pLegatoChar = svc->createCharacteristic(
+        LEGATO_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+    pLegatoChar->setCallbacks(new LegatoCallbacks());
+
     svc->start();
 
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -278,6 +306,7 @@ void setup() {
     pAccelSensChar->setValue(accelThreshold);
     pDirChar->setValue(stored_dir);
     pTiltChar->setValue(stored_tilt);
+    pLegatoChar->setValue(stored_legato);
 
     Serial.println("BLE pronto");
     dmp_ready = true;
@@ -338,6 +367,10 @@ void loop() {
     // ── Touch: note on/off, glide across sections ─────────────────────────────
     if (touch) {
         if (!touchFlag) {
+            if (legatoEnabled && legatoActive) {
+                noteOff(lastNote);
+                legatoActive = false;
+            }
             noteOn(currentNote);
             touchFlag = true;
         } else if (currentNote != lastNote) {
@@ -346,7 +379,11 @@ void loop() {
             noteOn(currentNote);
         }
     } else if (touchFlag) {
-        noteOff(lastNote);
+        if (legatoEnabled) {
+            legatoActive = true;
+        } else {
+            noteOff(lastNote);
+        }
         touchFlag = false;
     }
 
@@ -356,6 +393,10 @@ void loop() {
         accelFlag = false;
     }
     if (!accelFlag && abs(accel) > accelThreshold && (now - lastAccel) >= ACCEL_DEBOUNCE_MS) {
+        if (legatoEnabled && legatoActive) {
+            noteOff(lastNote);
+            legatoActive = false;
+        }
         noteOn(PERC_NOTE, PERC_CHANNEL);
         accelFlag = true;
         lastAccel = now;

@@ -10,7 +10,9 @@ The device is built around an **ESP32 DEVKIT V1** and an **MPU6050 IMU** (6-axis
 - The gyroscope roll angle (±90°) selects a MIDI note from a configurable set of sections.
 - Touching the capacitive sensor triggers Note-On/Note-Off for the currently selected note. Holding touch while moving across sections glides to the new note.
 - Acceleration spikes on the X-axis trigger a short percussion note (MIDI 36, channel 8).
-- All configuration (notes, sensitivity, direction, calibration offsets) is persisted in the ESP32's non-volatile storage (NVS) and can be updated by a BLE client.
+- Forearm tilt (pronation/supination) sends Pitch Bend with a ±10° dead zone.
+- Optional Legato mode: the note sustains after touch release, stopping only when a new touch or percussion event fires.
+- All configuration (notes, sensitivity, direction, pitch bend, legato, calibration offsets) is persisted in the ESP32's non-volatile storage (NVS) and can be updated by a BLE client.
 
 ## Structure
 

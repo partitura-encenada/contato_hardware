@@ -10,7 +10,9 @@ O dispositivo é baseado em um módulo **ESP32 DEVKIT V1** com um **IMU MPU6050*
 - O ângulo de rolagem do giroscópio (±90°) determina qual nota MIDI está selecionada dentre as seções configuráveis.
 - O toque no sensor capacitivo dispara Note-On/Note-Off da nota selecionada. Manter o toque enquanto muda de seção desliza para a nova nota.
 - Picos de aceleração no eixo X disparam uma nota de percussão curta (MIDI 36, canal 8).
-- Toda a configuração (notas, sensibilidade, direção, calibração) é persistida na memória não-volátil do ESP32 (NVS) e pode ser alterada pelo cliente BLE.
+- O ângulo de inclinação do antebraço (pronação/supinação) envia Pitch Bend, com zona morta de ±10°.
+- Modo Legato opcional: a nota sustenta após soltar o toque, encerrando apenas quando um novo toque ou percussão for acionado.
+- Toda a configuração (notas, sensibilidade, direção, pitch bend, legato, calibração) é persistida na memória não-volátil do ESP32 (NVS) e pode ser alterada pelo cliente BLE.
 
 ## Organização
 

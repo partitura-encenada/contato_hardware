@@ -20,6 +20,7 @@ static const char *STATUS_CHAR_UUID     = "f8d968fe-99d7-46c4-a61c-f38093af6ec8"
 static const char *DIR_CHAR_UUID        = "a1b2c3d4-0001-4b33-a751-6ce34ec4c701";
 static const char *CALIBRATE_CHAR_UUID  = "b4d0c9f8-3b9a-4a4e-93f2-2a8c9f5ee7a2";
 static const char *TILT_CHAR_UUID       = "d2e3f4a5-0002-4b33-a751-6ce34ec4c702";
+static const char *LEGATO_CHAR_UUID     = "e3f4a5b6-0003-4b33-a751-6ce34ec4c703";
 
 // ─── NVS keys ────────────────────────────────────────────────────────────────
 static const char *PREF_NAMESPACE    = "mpu";
@@ -28,6 +29,7 @@ static const char *PREF_KEY_SECTIONS = "sections";
 static const char *PREF_KEY_SENS     = "sens";
 static const char *PREF_KEY_DIR      = "dir";
 static const char *PREF_KEY_TILT     = "tilt_en";
+static const char *PREF_KEY_LEGATO   = "legato";
 
 // ─── Timing ──────────────────────────────────────────────────────────────────
 // Sensor poll + STATUS_CHAR notify rate (~50 Hz).

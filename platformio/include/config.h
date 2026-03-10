@@ -19,6 +19,7 @@ static const char *ACCEL_SENS_CHAR_UUID = "c7f2b2e2-1a2b-4c3d-9f0a-123456abcdef"
 static const char *STATUS_CHAR_UUID     = "f8d968fe-99d7-46c4-a61c-f38093af6ec8";
 static const char *DIR_CHAR_UUID        = "a1b2c3d4-0001-4b33-a751-6ce34ec4c701";
 static const char *CALIBRATE_CHAR_UUID  = "b4d0c9f8-3b9a-4a4e-93f2-2a8c9f5ee7a2";
+static const char *TILT_CHAR_UUID       = "d2e3f4a5-0002-4b33-a751-6ce34ec4c702";
 
 // ─── NVS keys ────────────────────────────────────────────────────────────────
 static const char *PREF_NAMESPACE    = "mpu";
@@ -26,10 +27,11 @@ static const char *PREF_KEY_OFFS     = "offs";
 static const char *PREF_KEY_SECTIONS = "sections";
 static const char *PREF_KEY_SENS     = "sens";
 static const char *PREF_KEY_DIR      = "dir";
+static const char *PREF_KEY_TILT     = "tilt_en";
 
 // ─── Timing ──────────────────────────────────────────────────────────────────
-// Sensor poll + STATUS_CHAR notify rate (~333 Hz).
-static const unsigned long SENSOR_INTERVAL_MS  = 3;
+// Sensor poll + STATUS_CHAR notify rate (~50 Hz).
+static const unsigned long SENSOR_INTERVAL_MS  = 20;
 
 // How long the percussion note is held before Note-Off is sent.
 static const unsigned long PERC_NOTE_MS        = 80;

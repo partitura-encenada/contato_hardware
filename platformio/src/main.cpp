@@ -18,6 +18,7 @@ NimBLECharacteristic       *pStatusChar    = nullptr;
 NimBLECharacteristic       *pAccelSensChar = nullptr;
 NimBLECharacteristic       *pDirChar       = nullptr;
 NimBLECharacteristic       *pCalibrateChar = nullptr;
+NimBLECharacteristic       *pTiltChar      = nullptr;
 
 MPU6050     mpu;
 uint8_t     fifo_buffer[64];
@@ -35,6 +36,7 @@ bool          touchFlag           = false;
 bool          accelFlag           = false;
 byte          lastNote            = 0;
 volatile bool calibrate_requested = false;
+bool          tiltEnabled         = false;
 
 // ─── MIDI helpers ─────────────────────────────────────────────────────────────
 
@@ -59,6 +61,13 @@ static void noteOn(byte note, uint8_t ch = 1) {
 static void noteOff(byte note, uint8_t ch = 1) {
     sendMidi(0x80 | ((ch - 1) & 0x0F), note, 0);
     Serial.printf("Note Off: %d ch%u\n", note, (unsigned)ch);
+}
+
+static void pitchBend(int degrees, uint8_t ch = 1) {
+    if (degrees >  90) degrees =  90;
+    if (degrees < -90) degrees = -90;
+    int bend = (int)((degrees + 90) / 180.0f * 16383.0f);
+    sendMidi(0xE0 | ((ch - 1) & 0x0F), bend & 0x7F, (bend >> 7) & 0x7F);
 }
 
 // ─── Calibration ─────────────────────────────────────────────────────────────
@@ -94,7 +103,8 @@ static void calibrateAndSave() {
 // ─── BLE Callbacks ───────────────────────────────────────────────────────────
 
 class ServerCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer *, NimBLEConnInfo &) override {
+    void onConnect(NimBLEServer *, NimBLEConnInfo &connInfo) override {
+        pServer->updateConnParams(connInfo.getConnHandle(), 6, 6, 0, 200);
         Serial.println("Client conectado");
         digitalWrite(LED_PIN, HIGH);
     }
@@ -106,7 +116,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
 };
 
 class SectionsCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
+    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
         std::string val = pChar->getValue();
         prefs.begin(PREF_NAMESPACE, false);
         prefs.putBytes(PREF_KEY_SECTIONS, val.data(), val.size());
@@ -118,7 +128,7 @@ class SectionsCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class AccelSensCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
+    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
         std::string val = pChar->getValue();
         int16_t received;
         memcpy(&received, val.data(), sizeof(int16_t));
@@ -132,7 +142,7 @@ class AccelSensCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class DirCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
+    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
         std::string v = pChar->getValue();
         uint8_t b = (uint8_t)v[0];
         prefs.begin(PREF_NAMESPACE, false);
@@ -142,8 +152,19 @@ class DirCallbacks : public NimBLECharacteristicCallbacks {
     }
 };
 
+class TiltCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &connInfo) override {
+        std::string v = pChar->getValue();
+        tiltEnabled = v.size() >= 1 && v[0] != 0;
+        prefs.begin(PREF_NAMESPACE, false);
+        prefs.putUChar(PREF_KEY_TILT, tiltEnabled ? 1 : 0);
+        prefs.end();
+        Serial.printf("Pitch bend: %s\n", tiltEnabled ? "on" : "off");
+    }
+};
+
 class CalibrateCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *, NimBLEConnInfo &) override {
+    void onWrite(NimBLECharacteristic *, NimBLEConnInfo &connInfo) override {
         calibrate_requested = true;
     }
 };
@@ -186,7 +207,9 @@ void setup() {
 
     accelThreshold = prefs.getInt(PREF_KEY_SENS, DEFAULT_ACCEL_THRESHOLD);
 
-    uint8_t stored_dir = prefs.getUChar(PREF_KEY_DIR, 0);
+    uint8_t stored_dir  = prefs.getUChar(PREF_KEY_DIR,  0);
+    uint8_t stored_tilt = prefs.getUChar(PREF_KEY_TILT, 0);
+    tiltEnabled = stored_tilt != 0;
 
     uint8_t sec_buf[8];
     size_t sections_size = prefs.isKey(PREF_KEY_SECTIONS)
@@ -232,6 +255,10 @@ void setup() {
         CALIBRATE_CHAR_UUID, NIMBLE_PROPERTY::WRITE);
     pCalibrateChar->setCallbacks(new CalibrateCallbacks());
 
+    pTiltChar = svc->createCharacteristic(
+        TILT_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+    pTiltChar->setCallbacks(new TiltCallbacks());
+
     svc->start();
 
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -250,6 +277,7 @@ void setup() {
 
     pAccelSensChar->setValue(accelThreshold);
     pDirChar->setValue(stored_dir);
+    pTiltChar->setValue(stored_tilt);
 
     Serial.println("BLE pronto");
     dmp_ready = true;
@@ -290,6 +318,10 @@ void loop() {
     std::string dir = pDirChar->getValue();
     if (dir.size() >= 1 && dir[0]) gyro = -gyro;
 
+    // Tilt: rotação da mão no eixo do antebraço (pronação/supinação), eixo Y como antebraço
+    int tilt = (int)(atan2f(gravity.x, gravity.z) * 180.0f / M_PI);
+    if (dir.size() >= 1 && dir[0]) tilt = -tilt;
+
     bool touch = touchRead(TOUCH_PIN) < TOUCH_THRESHOLD;
     int  accel = aaReal.x / 10;
 
@@ -329,9 +361,11 @@ void loop() {
         lastAccel = now;
     }
 
+    if (tiltEnabled) pitchBend(tilt);
+
     // ── Status notify ─────────────────────────────────────────────────────────
     if (pServer->getConnectedCount()) {
-        StatusPacket pkt = { 0, (uint8_t)touch, (int16_t)gyro, (int16_t)accel };
+        StatusPacket pkt = { 0, (uint8_t)touch, (int16_t)gyro, (int16_t)accel, (int16_t)tilt };
         pStatusChar->setValue((uint8_t *)&pkt, sizeof(StatusPacket));
         pStatusChar->notify();
     }

@@ -148,8 +148,8 @@ void loop() {
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0; //mudança message.touch = 1 ? touchRead(T3) < 20 : 0;
 
         #ifdef DEBUG
-            Serial.print("Touch raw value: ");
-            Serial.println(touchRead(T3));
+            // Serial.print("Touch raw value: ");
+            // Serial.println(touchRead(T3));
         #endif
 
         esp_now_send(broadcastAddress, (uint8_t *) &message, sizeof(message)); // Casta pointer para uint8_t e envia mensagem para peer 

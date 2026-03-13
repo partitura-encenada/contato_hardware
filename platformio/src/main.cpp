@@ -66,21 +66,6 @@ static void noteOff(byte note, uint8_t ch = 1) {
     Serial.printf("Note Off: %d ch%u\n", note, (unsigned)ch);
 }
 
-static void pitchBend(int degrees, uint8_t ch = 1) {
-    if (degrees >  90) degrees =  90;
-    if (degrees < -90) degrees = -90;
-    int bend;
-    if (degrees > 10)
-        bend = 8191 + (int)((degrees - 10) / 80.0f * 8192.0f);
-    else if (degrees < -10)
-        bend = 8191 + (int)((degrees + 10) / 80.0f * 8192.0f);
-    else
-        bend = 8191;
-    if (bend > 16383) bend = 16383;
-    if (bend < 0)     bend = 0;
-    sendMidi(0xE0 | ((ch - 1) & 0x0F), bend & 0x7F, (bend >> 7) & 0x7F);
-}
-
 // ─── Calibration ─────────────────────────────────────────────────────────────
 
 static void calibrateAndSave() {
@@ -402,7 +387,21 @@ void loop() {
         lastAccel = now;
     }
 
-    if (tiltEnabled) pitchBend(tilt);
+    if (tiltEnabled) {
+        int degrees = tilt;
+        if (degrees >  90) degrees =  90;
+        if (degrees < -90) degrees = -90;
+        int bend;
+        if (degrees > 25)
+            bend = 8191 + (int)((degrees - 25) / 65.0f * 1638.0f);
+        else if (degrees < -25)
+            bend = 8191 + (int)((degrees + 25) / 65.0f * 1638.0f);
+        else
+            bend = 8191;
+        if (bend > 16383) bend = 16383;
+        if (bend < 0)     bend = 0;
+        sendMidi(0xE0, bend & 0x7F, (bend >> 7) & 0x7F);
+    }
 
     // ── Status notify ─────────────────────────────────────────────────────────
     if (pServer->getConnectedCount()) {

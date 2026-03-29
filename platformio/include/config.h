@@ -20,6 +20,8 @@ static const char *ACCEL_SENS_CHAR_UUID= "c7f2b2e2-1a2b-4c3d-9f0a-123456abcdef";
 static const char *STATUS_CHAR_UUID    = "f8d968fe-99d7-46c4-a61c-f38093af6ec8";
 static const char *DIR_CHAR_UUID       = "a1b2c3d4-0001-4b33-a751-6ce34ec4c701";
 static const char *CALIBRATE_CHAR_UUID = "b4d0c9f8-3b9a-4a4e-93f2-2a8c9f5ee7a2";
+static const char *TILT_CHAR_UUID      = "d2e3f4a5-0002-4b33-a751-6ce34ec4c702";
+static const char *LEGATO_CHAR_UUID    = "e3f4a5b6-0003-4b33-a751-6ce34ec4c703";
 
 // ─── Chaves NVS ──────────────────────────────────────────────────────────────
 static const char *PREF_NAMESPACE    = "mpu";
@@ -27,6 +29,8 @@ static const char *PREF_KEY_OFFS     = "offs";
 static const char *PREF_KEY_SECTIONS = "sections";
 static const char *PREF_KEY_SENS     = "sens";
 static const char *PREF_KEY_DIR      = "dir";
+static const char *PREF_KEY_TILT     = "tilt";
+static const char *PREF_KEY_LEGATO   = "legato";
 
 // ─── Temporização ────────────────────────────────────────────────────────────
 // Intervalo de amostragem dos sensores e envio via notify BLE (~333 Hz).
@@ -39,13 +43,22 @@ static const unsigned long ACCEL_DEBOUNCE_MS = 2000;
 // ─── Sensor ──────────────────────────────────────────────────────────────────
 // Ângulo de rolagem limitado a ±GYRO_MAX_DEG para evitar instabilidade próxima à vertical.
 static const float GYRO_MAX_DEG = 89.0f;
+static const float TILT_MAX_DEG = 89.0f;
+static const int   PITCH_BEND_DEADZONE_DEG = 10;
+static const int   PITCH_BEND_MAX_DEG      = 45;
+static const int   PITCH_BEND_CENTER       = 8192;
+static const int   PITCH_BEND_MAX_VALUE    = 16383;
 
 // ─── Padrões musicais ────────────────────────────────────────────────────────
 // Usados quando nenhuma seção de notas foi salva na NVS ainda.
 static const int     DEFAULT_SECTION_COUNT    = 6;
 static const uint8_t DEFAULT_NOTE             = 60;  // Dó central (MIDI 60)
+static const uint8_t DEFAULT_DIR              = 1;
+static const uint8_t DEFAULT_TILT_ENABLED     = 0;
+static const uint8_t DEFAULT_LEGATO_ENABLED   = 0;
 
 // Nota de percussão: MIDI 36 = Bumbo (Bass Drum 1), canal 8 = canal de percussão GM.
+static const uint8_t NOTE_CHANNEL  = 1;
 static const uint8_t PERC_NOTE    = 36;
 static const uint8_t PERC_CHANNEL = 8;
 
@@ -55,3 +68,7 @@ static const int32_t DEFAULT_ACCEL_THRESHOLD = 10000;
 // Intervalo válido do limiar do acelerômetro configurável via BLE.
 static const int32_t MIN_ACCEL_THRESHOLD = 100;
 static const int32_t MAX_ACCEL_THRESHOLD = 32767;
+
+// Estado resumido enviado no pacote STATUS.
+static const uint8_t STATUS_STATE_IDLE        = 0;
+static const uint8_t STATUS_STATE_CALIBRATING = 1;

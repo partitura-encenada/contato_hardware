@@ -1,16 +1,52 @@
 #pragma once
 
-#include <cstdint>
+#include <Arduino.h>
+#include <string>
 
-// Enviado via notify em STATUS_CHAR a cada STATUS_INTERVAL_MS.
+#include "config.h"
+
 struct __attribute__((packed)) StatusPacket {
-    int16_t gyro_x;   // Ângulo de rolagem em graus (limitado a ±GYRO_MAX_DEG)
-    int16_t accel_x;  // Aceleração linear no eixo X (unidade bruta IMU ÷ 10)
-    uint8_t touch;    // Sensor de toque: 1 = ativo, 0 = liberado
+    uint8_t state;
+    uint8_t touch;
+    int16_t gyro_x;
+    int16_t accel_x;
+    int16_t tilt;
 };
 
-// Registradores de offset do MPU6050 armazenados na NVS para calibração persistente.
 struct MPUOffsets {
-    int16_t accelX, accelY, accelZ;
-    int16_t gyroX,  gyroY,  gyroZ;
+    int16_t accel_x;
+    int16_t accel_y;
+    int16_t accel_z;
+    int16_t gyro_x;
+    int16_t gyro_y;
+    int16_t gyro_z;
+};
+
+struct PersistentConfig {
+    std::string sections = std::string(DEFAULT_SECTION_COUNT, static_cast<char>(DEFAULT_NOTE));
+    int32_t accel_threshold = DEFAULT_ACCEL_THRESHOLD;
+    bool flip_gyro = DEFAULT_DIRECTION != 0;
+    bool tilt_enabled = DEFAULT_TILT_ENABLED != 0;
+    bool legato_enabled = DEFAULT_LEGATO_ENABLED != 0;
+};
+
+struct MotionSample {
+    int gyro = 0;
+    int accel = 0;
+    int tilt = 0;
+    bool touch = false;
+    byte note = DEFAULT_NOTE;
+};
+
+struct RuntimeState {
+    bool dmp_ready = false;
+    bool touch_pressed = false;
+    bool note_playing = false;
+    bool percussion_playing = false;
+    bool calibration_requested = false;
+    uint8_t status = STATUS_STATE_IDLE;
+    unsigned long last_status_ms = 0;
+    unsigned long last_percussion_ms = 0;
+    byte last_note = DEFAULT_NOTE;
+    int last_pitch_bend = PITCH_BEND_CENTER;
 };

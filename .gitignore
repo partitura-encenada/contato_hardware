@@ -1,4 +1,3 @@
-
-
-
-
+# Claude Code / Codex - local settings and session data
+.claude/
+.codex/

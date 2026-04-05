@@ -1,188 +1,167 @@
 #include <Arduino.h>
-#include <Wire.h>
-#include <Preferences.h>
-#include "MPU6050_6Axis_MotionApps20.h"
 #include <NimBLEDevice.h>
+#include <Preferences.h>
+#include <Wire.h>
 
+#include <string>
+#include <vector>
+
+#include "MPU6050_6Axis_MotionApps20.h"
 #include "config.h"
 #include "types.h"
 
-// ─── Variáveis Globais ───────────────────────────────────────────────────────
+Preferences preferences;
+MPU6050 mpu;
 
-Preferences prefs;
+NimBLEServer *server_handle = nullptr;
+NimBLECharacteristic *midi_characteristic = nullptr;
+NimBLECharacteristic *sections_characteristic = nullptr;
+NimBLECharacteristic *status_characteristic = nullptr;
+NimBLECharacteristic *accel_characteristic = nullptr;
+NimBLECharacteristic *direction_characteristic = nullptr;
+NimBLECharacteristic *tilt_characteristic = nullptr;
+NimBLECharacteristic *legato_characteristic = nullptr;
+NimBLECharacteristic *calibrate_characteristic = nullptr;
 
-static NimBLEServer         *pServer        = nullptr;
-NimBLECharacteristic        *pMidiChar      = nullptr;
-NimBLECharacteristic        *pSectionsChar  = nullptr;
-NimBLECharacteristic        *pStatusChar    = nullptr;
-NimBLECharacteristic        *pAccelSensChar = nullptr;
-NimBLECharacteristic        *pDirChar       = nullptr;
-NimBLECharacteristic        *pCalibrateChar = nullptr;
+PersistentConfig config;
+RuntimeState runtime_state;
+StatusPacket status_packet;
+MPUOffsets saved_offsets{};
 
-StatusPacket statusPkt;
-
-MPU6050     mpu;
-uint16_t    fifo_count;
-uint8_t     fifo_buffer[64];
-Quaternion  q;
-VectorInt16 aa;
-VectorInt16 aaReal;
+uint8_t fifo_buffer[64];
+Quaternion quaternion;
+VectorInt16 raw_accel;
+VectorInt16 linear_accel;
 VectorFloat gravity;
-float       ypr[3];       // [yaw, pitch, roll] — guinada, arfagem, rolagem
-bool        dmp_ready = false;
+float yaw_pitch_roll[3];
 
-int32_t       accelThreshold = DEFAULT_ACCEL_THRESHOLD;
-unsigned long lastSent       = 0;
-unsigned long lastAccel      = 0;
-bool          touchFlag      = false;
-bool          accelFlag      = false;
-byte          lastNote       = 0;
 
-// ─── Auxiliares ──────────────────────────────────────────────────────────────
-
-static float clamp(float v, float max_v, float min_v) {
-    if (v > max_v) return max_v;
-    if (v < min_v) return min_v;
-    return v;
+static float clamp_float(float value, float minimum, float maximum) {
+    if (value < minimum) return minimum;
+    if (value > maximum) return maximum;
+    return value;
 }
 
-// Pacote BLE MIDI: cabeçalho de timestamp de 2 bytes + status MIDI + bytes de dados.
-// Timestamp derivado de millis(); 6 bits altos no cabeçalho, 7 bits baixos no byte ts.
-static void sendMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
-    if (!pServer || !pServer->getConnectedCount()) return;
-    uint16_t ts = (uint16_t)millis();
-    uint8_t pkt[5] = {
-        (uint8_t)(0x80 | ((ts >> 7) & 0x3F)),  // cabeçalho
-        (uint8_t)(0x80 | (ts & 0x7F)),          // timestamp
-        status, data1, data2
+static int clamp_int(int value, int minimum, int maximum) {
+    if (value < minimum) return minimum;
+    if (value > maximum) return maximum;
+    return value;
+}
+
+static void send_midi_message(uint8_t status, uint8_t data1, uint8_t data2) {
+    if (server_handle->getConnectedCount() == 0) return;
+
+    const uint16_t timestamp = static_cast<uint16_t>(millis());
+    uint8_t packet[5] = {
+        static_cast<uint8_t>(0x80 | ((timestamp >> 7) & 0x3F)),
+        static_cast<uint8_t>(0x80 | (timestamp & 0x7F)),
+        status,
+        data1,
+        data2,
     };
-    pMidiChar->setValue(pkt, sizeof(pkt));
-    pMidiChar->notify();
+
+    midi_characteristic->setValue(packet, sizeof(packet));
+    midi_characteristic->notify();
 }
 
-static void playNote(byte n, uint8_t channel = 1) {
-    lastNote = n;
-    sendMidiMessage(0x90 | ((channel - 1) & 0x0F), n, 80);
-    Serial.printf("Tocando nota: %d (ch %u)\n", n, (unsigned)channel);
+static void play_note(byte note, uint8_t channel = NOTE_CHANNEL) {
+    runtime_state.last_note = note;
+    send_midi_message(0x90 | ((channel - 1) & 0x0F), note, 80);
 }
 
-static void stopNote(byte n, uint8_t channel = 1) {
-    lastNote = n;
-    sendMidiMessage(0x80 | ((channel - 1) & 0x0F), n, 80);
-    Serial.printf("Parando nota: %d (ch %u)\n", n, (unsigned)channel);
+static void stop_note(byte note, uint8_t channel = NOTE_CHANNEL) {
+    runtime_state.last_note = note;
+    send_midi_message(0x80 | ((channel - 1) & 0x0F), note, 80);
 }
 
-static void printOffsets(const MPUOffsets &o) {
-    Serial.printf("Offsets do acelerômetro: X=%d Y=%d Z=%d\n", o.accelX, o.accelY, o.accelZ);
-    Serial.printf("Offsets do giroscópio:   X=%d Y=%d Z=%d\n", o.gyroX,  o.gyroY,  o.gyroZ);
+static void send_pitch_bend(int value) {
+    value = clamp_int(value, 0, PITCH_BEND_MAX_VALUE);
+    send_midi_message(0xE0 | ((NOTE_CHANNEL - 1) & 0x0F), value & 0x7F, (value >> 7) & 0x7F);
 }
-
-// Executa a calibração do MPU e salva os offsets na NVS. Retorna true em caso de sucesso.
-static bool calibrateAndSaveOffsets() {
-    Serial.println("Iniciando calibração");
-    mpu.CalibrateGyro(6);
-    mpu.CalibrateAccel(6);
-
-    MPUOffsets offs;
-    offs.accelX = mpu.getXAccelOffset();
-    offs.accelY = mpu.getYAccelOffset();
-    offs.accelZ = mpu.getZAccelOffset();
-    offs.gyroX  = mpu.getXGyroOffset();
-    offs.gyroY  = mpu.getYGyroOffset();
-    offs.gyroZ  = mpu.getZGyroOffset();
-
-    Serial.println("Calibração concluída. Offsets:");
-    printOffsets(offs);
-
-    prefs.begin(PREF_NAMESPACE, false);
-    size_t wrote = prefs.putBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets));
-    prefs.end();  // sempre fecha, independente do resultado
-
-    if (wrote == sizeof(MPUOffsets)) {
-        Serial.println("Offsets salvos na NVS.");
-        return true;
-    }
-    Serial.printf("ERRO salvando offsets: escreveu %u de %u bytes\n",
-                  (unsigned)wrote, (unsigned)sizeof(MPUOffsets));
-    return false;
-}
-
-// ─── Callbacks BLE ───────────────────────────────────────────────────────────
 
 class ServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer *, NimBLEConnInfo &) override {
-        Serial.println("Client conectado");
         digitalWrite(LED_PIN, HIGH);
     }
+
     void onDisconnect(NimBLEServer *, NimBLEConnInfo &, int) override {
-        Serial.println("Client desconectado, anunciando");
         digitalWrite(LED_PIN, LOW);
         NimBLEDevice::startAdvertising();
     }
 };
 
-class SectionsCharCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
-        std::string val = pChar->getValue();
-        Serial.print("Escrita em SECTIONS (bytes):");
-        for (unsigned char c : val)
-            Serial.printf(" %u", (unsigned)c);
-        Serial.println();
-        prefs.begin(PREF_NAMESPACE, false);
-        prefs.putBytes(PREF_KEY_SECTIONS, val.data(), val.size());
-        prefs.end();
-        Serial.println("SECTIONS salvo na NVS.");
+class SectionsCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *characteristic, NimBLEConnInfo &) override {
+        config.sections = characteristic->getValue();
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putBytes(PREF_KEY_SECTIONS, config.sections.data(), config.sections.size());
+        preferences.end();
     }
 };
 
-class NotifyCharCallbacks : public NimBLECharacteristicCallbacks {
-    void onSubscribe(NimBLECharacteristic *pChar, NimBLEConnInfo &, uint16_t subValue) override {
-        Serial.printf("Cliente inscrito em %s (subValue=%u)\n",
-                      pChar->getUUID().toString().c_str(), subValue);
+class AccelCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *characteristic, NimBLEConnInfo &) override {
+        const std::string value = characteristic->getValue();
+        int16_t threshold = 0;
+        memcpy(&threshold, value.data(), sizeof(int16_t));
+        config.accel_threshold = clamp_int(threshold, MIN_ACCEL_THRESHOLD, MAX_ACCEL_THRESHOLD);
+
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putInt(PREF_KEY_ACCEL, config.accel_threshold);
+        preferences.end();
+
+        const int16_t accel_threshold = static_cast<int16_t>(config.accel_threshold);
+        accel_characteristic->setValue(reinterpret_cast<const uint8_t *>(&accel_threshold), sizeof(accel_threshold));
     }
 };
 
-class DirCharCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
-        std::string v = pChar->getValue();
-        if (v.size() < 1) return;
-        uint8_t b = (uint8_t)v[0];
-        prefs.begin(PREF_NAMESPACE, false);
-        prefs.putUChar(PREF_KEY_DIR, b);
-        prefs.end();
-        Serial.printf("DIR recebido: %u → flip_gyro=%s (salvo)\n",
-                      (unsigned)b, b ? "true" : "false");
+class DirectionCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *characteristic, NimBLEConnInfo &) override {
+        config.flip_gyro = static_cast<uint8_t>(characteristic->getValue()[0]) != 0;
+
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putUChar(PREF_KEY_DIRECTION, config.flip_gyro ? 1 : 0);
+        preferences.end();
+
+        const uint8_t direction = config.flip_gyro ? 1 : 0;
+        direction_characteristic->setValue(&direction, sizeof(direction));
     }
 };
 
-class AccelSensCharCallbacks : public NimBLECharacteristicCallbacks {
-    void onWrite(NimBLECharacteristic *pChar, NimBLEConnInfo &) override {
-        std::string val = pChar->getValue();
-        if (val.size() != 2) {
-            Serial.println("Escrita em accel sens com tamanho inesperado.");
-            return;
-        }
-        int16_t received = 0;
-        memcpy(&received, val.data(), sizeof(int16_t));
-        if (received < MIN_ACCEL_THRESHOLD || received > MAX_ACCEL_THRESHOLD) {
-            Serial.printf("Accel threshold fora do intervalo válido: %d\n", (int)received);
-            return;
-        }
-        accelThreshold = (int32_t)received;
-        prefs.begin(PREF_NAMESPACE, false);
-        prefs.putInt(PREF_KEY_SENS, accelThreshold);
-        prefs.end();
-        Serial.printf("Novo accel threshold recebido: %ld (salvo)\n", (long)accelThreshold);
+class TiltCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *characteristic, NimBLEConnInfo &) override {
+        config.tilt_enabled = static_cast<uint8_t>(characteristic->getValue()[0]) != 0;
+
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putUChar(PREF_KEY_TILT, config.tilt_enabled ? 1 : 0);
+        preferences.end();
+
+        runtime_state.last_pitch_bend = PITCH_BEND_CENTER;
+        send_pitch_bend(PITCH_BEND_CENTER);
+
+        const uint8_t tilt_enabled = config.tilt_enabled ? 1 : 0;
+        tilt_characteristic->setValue(&tilt_enabled, sizeof(tilt_enabled));
     }
 };
 
-class CalibrateCharCallbacks : public NimBLECharacteristicCallbacks {
+class LegatoCallbacks : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic *characteristic, NimBLEConnInfo &) override {
+        config.legato_enabled = static_cast<uint8_t>(characteristic->getValue()[0]) != 0;
+
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putUChar(PREF_KEY_LEGATO, config.legato_enabled ? 1 : 0);
+        preferences.end();
+
+        const uint8_t legato_enabled = config.legato_enabled ? 1 : 0;
+        legato_characteristic->setValue(&legato_enabled, sizeof(legato_enabled));
+    }
+};
+
+class CalibrateCallbacks : public NimBLECharacteristicCallbacks {
     void onWrite(NimBLECharacteristic *, NimBLEConnInfo &) override {
-        calibrateAndSaveOffsets();
+        runtime_state.calibration_requested = true;
     }
 };
-
-// ─── Configuração ────────────────────────────────────────────────────────────
 
 void setup() {
     Serial.begin(115200);
@@ -193,188 +172,186 @@ void setup() {
 
     Wire.begin();
     Wire.setClock(I2C_CLOCK_HZ);
-
-    Serial.println("Inicializando MPU6050...");
     mpu.initialize();
-    Serial.println(mpu.testConnection()
-        ? "Conexão com MPU bem-sucedida"
-        : "Conexão com MPU FALHOU");
-
-    uint8_t dev_status = mpu.dmpInitialize();
-    if (dev_status != 0) {
-        Serial.printf("Falha ao inicializar DMP (status=%u)\n", dev_status);
-        return;
-    }
+    mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
-    Serial.println("DMP inicializado e ativado.");
+    runtime_state.dmp_ready = true;
 
-    // ── Carrega todas as configurações persistidas em uma sessão NVS ──
-    prefs.begin(PREF_NAMESPACE, true);
-
-    MPUOffsets offsets;
-    bool have_offsets = prefs.getBytes(PREF_KEY_OFFS, &offsets, sizeof(MPUOffsets)) == sizeof(MPUOffsets);
-    if (have_offsets) {
-        mpu.setXAccelOffset(offsets.accelX);
-        mpu.setYAccelOffset(offsets.accelY);
-        mpu.setZAccelOffset(offsets.accelZ);
-        mpu.setXGyroOffset(offsets.gyroX);
-        mpu.setYGyroOffset(offsets.gyroY);
-        mpu.setZGyroOffset(offsets.gyroZ);
-        Serial.println("Offsets carregados e aplicados:");
-        printOffsets(offsets);
-    }
-
-    accelThreshold = prefs.getInt(PREF_KEY_SENS, DEFAULT_ACCEL_THRESHOLD);
-    Serial.printf("Accel threshold carregado da NVS: %ld\n", (long)accelThreshold);
-
-    uint8_t stored_dir = prefs.getUChar(PREF_KEY_DIR, 1);
-
-    std::string saved_sections;
-    size_t sections_size = prefs.getBytes(PREF_KEY_SECTIONS, nullptr, 0);
+    preferences.begin(PREF_NAMESPACE, true);
+    preferences.getBytes(PREF_KEY_OFFSETS, &saved_offsets, sizeof(MPUOffsets));
+    config.accel_threshold = preferences.getInt(PREF_KEY_ACCEL, DEFAULT_ACCEL_THRESHOLD);
+    config.flip_gyro = preferences.getUChar(PREF_KEY_DIRECTION, DEFAULT_DIRECTION) != 0;
+    config.tilt_enabled = preferences.getUChar(PREF_KEY_TILT, DEFAULT_TILT_ENABLED) != 0;
+    config.legato_enabled = preferences.getUChar(PREF_KEY_LEGATO, DEFAULT_LEGATO_ENABLED) != 0;
+    const size_t sections_size = preferences.getBytes(PREF_KEY_SECTIONS, nullptr, 0);
     if (sections_size > 0) {
-        std::vector<char> buf(sections_size);
-        prefs.getBytes(PREF_KEY_SECTIONS, buf.data(), sections_size);
-        saved_sections.assign(buf.begin(), buf.end());
+        std::vector<char> buffer(sections_size);
+        preferences.getBytes(PREF_KEY_SECTIONS, buffer.data(), sections_size);
+        config.sections.assign(buffer.begin(), buffer.end());
     }
+    preferences.end();
 
-    prefs.end();
-    // ── Fim da sessão NVS ──
+    mpu.setXAccelOffset(saved_offsets.accel_x);
+    mpu.setYAccelOffset(saved_offsets.accel_y);
+    mpu.setZAccelOffset(saved_offsets.accel_z);
+    mpu.setXGyroOffset(saved_offsets.gyro_x);
+    mpu.setYGyroOffset(saved_offsets.gyro_y);
+    mpu.setZGyroOffset(saved_offsets.gyro_z);
 
-    // Executa calibração do MPU apenas se não houver offsets salvos.
-    // Ignorar quando offsets são carregados evita sobrescrever valores conhecidos como bons.
-    if (!have_offsets) {
-        Serial.println("Nenhum offset salvo; calibrando agora...");
-        mpu.CalibrateGyro(6);
-        mpu.CalibrateAccel(6);
-    }
-
-    // ── Configuração BLE ──
     NimBLEDevice::init(DEVICE_NAME);
-    pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new ServerCallbacks());
+    server_handle = NimBLEDevice::createServer();
+    server_handle->setCallbacks(new ServerCallbacks());
 
-    NimBLEService *pMainService = pServer->createService(MAIN_SERVICE_UUID);
+    NimBLEService *service = server_handle->createService(MAIN_SERVICE_UUID);
+    midi_characteristic = service->createCharacteristic(MIDI_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::NOTIFY);
+    sections_characteristic = service->createCharacteristic(SECTIONS_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+    accel_characteristic = service->createCharacteristic(ACCEL_SENS_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+    direction_characteristic = service->createCharacteristic(DIR_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+    tilt_characteristic = service->createCharacteristic(TILT_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+    legato_characteristic = service->createCharacteristic(LEGATO_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
+    status_characteristic = service->createCharacteristic(STATUS_CHAR_UUID, NIMBLE_PROPERTY::NOTIFY);
+    calibrate_characteristic = service->createCharacteristic(CALIBRATE_CHAR_UUID, NIMBLE_PROPERTY::WRITE);
 
-    // Característica BLE MIDI (especificação padrão: READ | WRITE_NR | NOTIFY)
-    pMidiChar = pMainService->createCharacteristic(
-        MIDI_CHAR_UUID,
-        NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::NOTIFY);
+    sections_characteristic->setCallbacks(new SectionsCallbacks());
+    accel_characteristic->setCallbacks(new AccelCallbacks());
+    direction_characteristic->setCallbacks(new DirectionCallbacks());
+    tilt_characteristic->setCallbacks(new TiltCallbacks());
+    legato_characteristic->setCallbacks(new LegatoCallbacks());
+    calibrate_characteristic->setCallbacks(new CalibrateCallbacks());
 
-    pSectionsChar = pMainService->createCharacteristic(
-        SECTIONS_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-    pSectionsChar->setCallbacks(new SectionsCharCallbacks());
+    sections_characteristic->setValue(config.sections);
+    const int16_t accel_threshold = static_cast<int16_t>(config.accel_threshold);
+    accel_characteristic->setValue(reinterpret_cast<const uint8_t *>(&accel_threshold), sizeof(accel_threshold));
+    const uint8_t direction = config.flip_gyro ? 1 : 0;
+    direction_characteristic->setValue(&direction, sizeof(direction));
+    const uint8_t tilt_enabled = config.tilt_enabled ? 1 : 0;
+    tilt_characteristic->setValue(&tilt_enabled, sizeof(tilt_enabled));
+    const uint8_t legato_enabled = config.legato_enabled ? 1 : 0;
+    legato_characteristic->setValue(&legato_enabled, sizeof(legato_enabled));
 
-    pAccelSensChar = pMainService->createCharacteristic(
-        ACCEL_SENS_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-    pAccelSensChar->setCallbacks(new AccelSensCharCallbacks());
-
-    pDirChar = pMainService->createCharacteristic(
-        DIR_CHAR_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
-    pDirChar->setCallbacks(new DirCharCallbacks());
-
-    pStatusChar = pMainService->createCharacteristic(
-        STATUS_CHAR_UUID, NIMBLE_PROPERTY::NOTIFY);
-    pStatusChar->setCallbacks(new NotifyCharCallbacks());
-
-    pCalibrateChar = pMainService->createCharacteristic(
-        CALIBRATE_CHAR_UUID, NIMBLE_PROPERTY::WRITE);
-    pCalibrateChar->setCallbacks(new CalibrateCharCallbacks());
-
-    pMainService->start();
-
-    NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(MAIN_SERVICE_UUID);
-    pAdvertising->enableScanResponse(true);
-    pAdvertising->setName(DEVICE_NAME);
-    pAdvertising->start();
-
-    if (!saved_sections.empty()) {
-        pSectionsChar->setValue(saved_sections);
-    } else {
-        Serial.println("Nenhuma nota encontrada ao iniciar; usando padrão.");
-        std::string def(DEFAULT_SECTION_COUNT, (char)DEFAULT_NOTE);
-        pSectionsChar->setValue(def);
-    }
-
-    pDirChar->setValue(stored_dir != 0);
-
-    Serial.println("Anúncio BLE iniciado");
-    dmp_ready = true;
+    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
+    advertising->addServiceUUID(MAIN_SERVICE_UUID);
+    advertising->enableScanResponse(true);
+    advertising->setName(DEVICE_NAME);
+    advertising->start();
 }
 
-// ─── Loop ────────────────────────────────────────────────────────────────────
-
 void loop() {
-    if (!dmp_ready) return;
+    if (!runtime_state.dmp_ready) return;
 
-    unsigned long now = millis();
-    if (now - lastSent < STATUS_INTERVAL_MS) return;
-    lastSent = now;
+    if (runtime_state.calibration_requested) {
+        runtime_state.status = STATUS_STATE_CALIBRATING;
+        mpu.CalibrateGyro(6);
+        mpu.CalibrateAccel(6);
 
+        saved_offsets.accel_x = mpu.getXAccelOffset();
+        saved_offsets.accel_y = mpu.getYAccelOffset();
+        saved_offsets.accel_z = mpu.getZAccelOffset();
+        saved_offsets.gyro_x = mpu.getXGyroOffset();
+        saved_offsets.gyro_y = mpu.getYGyroOffset();
+        saved_offsets.gyro_z = mpu.getZGyroOffset();
+
+        preferences.begin(PREF_NAMESPACE, false);
+        preferences.putBytes(PREF_KEY_OFFSETS, &saved_offsets, sizeof(MPUOffsets));
+        preferences.end();
+
+        runtime_state.status = STATUS_STATE_IDLE;
+        runtime_state.calibration_requested = false;
+    }
+
+    const unsigned long now = millis();
+    if ((now - runtime_state.last_status_ms) < STATUS_INTERVAL_MS) return;
+    runtime_state.last_status_ms = now;
     if (!mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) return;
 
-    mpu.dmpGetQuaternion(&q, fifo_buffer);
-    mpu.dmpGetGravity(&gravity, &q);
-    mpu.dmpGetAccel(&aa, fifo_buffer);
-    mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-    mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+    mpu.dmpGetQuaternion(&quaternion, fifo_buffer);
+    mpu.dmpGetGravity(&gravity, &quaternion);
+    mpu.dmpGetAccel(&raw_accel, fifo_buffer);
+    mpu.dmpGetYawPitchRoll(yaw_pitch_roll, &quaternion, &gravity);
+    mpu.dmpGetLinearAccel(&linear_accel, &raw_accel, &gravity);
 
-    // Mapeia o ângulo de rolagem [-89°, +89°] para seleção de nota
-    int gyro = (int)(ypr[2] * -180.0f / M_PI);
-    gyro = (int)clamp((float)gyro, GYRO_MAX_DEG, -GYRO_MAX_DEG);
+    int gyro = static_cast<int>(yaw_pitch_roll[2] * -180.0f / M_PI);
+    gyro = static_cast<int>(clamp_float(gyro, -GYRO_MAX_DEG, GYRO_MAX_DEG));
 
-    // Inverte direção opcionalmente (configurado via BLE)
-    std::string dir = pDirChar->getValue();
-    if (dir.size() >= 1 && (bool)dir[0]) gyro = -gyro;
+    int tilt = static_cast<int>(yaw_pitch_roll[1] * 180.0f / M_PI);
+    tilt = static_cast<int>(clamp_float(tilt, -TILT_MAX_DEG, TILT_MAX_DEG));
 
-    bool touch = touchRead(TOUCH_PIN) < TOUCH_THRESHOLD;
-    int  accel = aaReal.x / 10;
+    if (config.flip_gyro) gyro = -gyro;
 
-    // Mapeia a posição do giroscópio para índice de nota no array configurado
-    std::string notes = pSectionsChar->getValue();
-    int section = (int)((-gyro + GYRO_MAX_DEG) / (2.0f * GYRO_MAX_DEG) * notes.length());
-    if (section >= (int)notes.length())
-        section = (int)notes.length() - 1;  // limita ao índice válido
-    if (section < 0) section = 0;
+    const bool touch = touchRead(TOUCH_PIN) < TOUCH_THRESHOLD;
+    const int accel = linear_accel.x / 10;
 
-    byte currentNote = notes.empty() ? DEFAULT_NOTE : (byte)notes[section];
+    int section = static_cast<int>((-gyro + GYRO_MAX_DEG) / (2.0f * GYRO_MAX_DEG) * config.sections.size());
+    section = clamp_int(section, 0, static_cast<int>(config.sections.size()) - 1);
+    const byte note = static_cast<byte>(config.sections[section]);
 
-    // Lógica de nota por toque
     if (touch) {
-        if (!touchFlag) {
-            playNote(currentNote);
-            touchFlag = true;
+        if (!runtime_state.touch_pressed) {
+            if (runtime_state.note_playing && note != runtime_state.last_note) stop_note(runtime_state.last_note);
+            if (!runtime_state.note_playing || note != runtime_state.last_note) {
+                play_note(note);
+                runtime_state.note_playing = true;
+            }
+            runtime_state.touch_pressed = true;
+        } else if (note != runtime_state.last_note) {
+            if (runtime_state.note_playing) stop_note(runtime_state.last_note);
+            vTaskDelay(pdMS_TO_TICKS(10));
+            play_note(note);
+            runtime_state.note_playing = true;
         }
-        if (currentNote != lastNote) {
-            stopNote(lastNote);
-            vTaskDelay(10);
-            playNote(currentNote);
+    } else if (runtime_state.touch_pressed) {
+        runtime_state.touch_pressed = false;
+        if (!config.legato_enabled && runtime_state.note_playing) {
+            stop_note(runtime_state.last_note);
+            runtime_state.note_playing = false;
+        }
+    }
+
+    const bool threshold_crossed = abs(accel) > config.accel_threshold;
+    const bool debounce_complete = (now - runtime_state.last_percussion_ms) >= ACCEL_DEBOUNCE_MS;
+    if (!runtime_state.percussion_playing && threshold_crossed && debounce_complete) {
+        if (config.legato_enabled && runtime_state.note_playing) {
+            stop_note(runtime_state.last_note);
+            runtime_state.note_playing = false;
+        }
+        play_note(PERC_NOTE, PERC_CHANNEL);
+        runtime_state.percussion_playing = true;
+        runtime_state.last_percussion_ms = now;
+    }
+    if (runtime_state.percussion_playing && debounce_complete) {
+        stop_note(PERC_NOTE, PERC_CHANNEL);
+        runtime_state.percussion_playing = false;
+    }
+
+    if (!config.tilt_enabled) {
+        if (runtime_state.last_pitch_bend != PITCH_BEND_CENTER) {
+            send_pitch_bend(PITCH_BEND_CENTER);
+            runtime_state.last_pitch_bend = PITCH_BEND_CENTER;
         }
     } else {
-        if (touchFlag) {
-            stopNote(lastNote);
-            touchFlag = false;
+        int bend = PITCH_BEND_CENTER;
+        const int absolute_tilt = abs(tilt);
+        if (absolute_tilt > PITCH_BEND_DEADZONE_DEG) {
+            const int tilt_without_deadzone = tilt > 0
+                ? absolute_tilt - PITCH_BEND_DEADZONE_DEG
+                : -(absolute_tilt - PITCH_BEND_DEADZONE_DEG);
+            const int max_effective_tilt = PITCH_BEND_MAX_DEG - PITCH_BEND_DEADZONE_DEG;
+            const int clamped_tilt = clamp_int(tilt_without_deadzone, -max_effective_tilt, max_effective_tilt);
+            bend = PITCH_BEND_CENTER + (clamped_tilt * PITCH_BEND_CENTER) / max_effective_tilt;
+        }
+        if (bend != runtime_state.last_pitch_bend) {
+            send_pitch_bend(bend);
+            runtime_state.last_pitch_bend = bend;
         }
     }
 
-    // Lógica de percussão por acelerômetro
-    if (!accelFlag && abs(accel) > accelThreshold && (now - lastAccel) >= ACCEL_DEBOUNCE_MS) {
-        Serial.printf("Accel trigger: value=%d threshold=%ld\n", accel, (long)accelThreshold);
-        playNote(PERC_NOTE, PERC_CHANNEL);
-        accelFlag = true;
-        lastAccel = now;
-    }
-    if (accelFlag && (now - lastAccel) >= ACCEL_DEBOUNCE_MS) {
-        stopNote(PERC_NOTE, PERC_CHANNEL);
-        accelFlag = false;
-    }
+    if (server_handle->getConnectedCount() == 0) return;
 
-    // Envia notificação de status se um cliente estiver conectado
-    if (pServer->getConnectedCount()) {
-        statusPkt.gyro_x  = (int16_t)gyro;
-        statusPkt.accel_x = (int16_t)accel;
-        statusPkt.touch   = (uint8_t)touch;
-        pStatusChar->setValue((uint8_t *)&statusPkt, sizeof(StatusPacket));
-        pStatusChar->notify();
-    }
+    status_packet.state = runtime_state.status;
+    status_packet.touch = touch ? 1 : 0;
+    status_packet.gyro_x = static_cast<int16_t>(gyro);
+    status_packet.accel_x = static_cast<int16_t>(accel);
+    status_packet.tilt = static_cast<int16_t>(tilt);
+    status_characteristic->setValue(reinterpret_cast<const uint8_t *>(&status_packet), sizeof(StatusPacket));
+    status_characteristic->notify();
 }

@@ -11,9 +11,9 @@
 // #define AUTO_CALLIBRATION 
 
 //═════════ ALTERAR POR CONJUNTO ═════════                  
-const uint8_t ID = 8;               
-const int CANAL_ESPECIFICO = 13;     
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0x09, 0x70};
+const uint8_t ID = 5;               
+const int CANAL_ESPECIFICO = 8;     
+uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; 
 const int delay_time = 10;         
 const int touch_sensitivity = 20;   
 const int callibration_time = 6;  
@@ -76,10 +76,10 @@ void setup() {
     mpu.setDMPEnabled(true);
 
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1098); 
-        mpu.setXGyroOffset(177);    
-        mpu.setYGyroOffset(78);    
-        mpu.setZGyroOffset(1);  
+        mpu.setZAccelOffset(1062); 
+        mpu.setXGyroOffset(62);    
+        mpu.setYGyroOffset(-1);    
+        mpu.setZGyroOffset(24); 
     #endif
 
     if (dev_status == 0) {

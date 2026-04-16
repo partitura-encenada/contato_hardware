@@ -6,14 +6,16 @@
 #include "esp_wifi.h"            
 
 //═════════ Defines ═════════
-#define DEBUG            
-// #define USE_DELAY    
-// #define AUTO_CALLIBRATION 
+// #define USE_DELAY
+// #define AUTO_CALLIBRATION
+// #define PRINT_MAC        // Imprime o MAC deste dispositivo no boot
+// #define PRINT_CANAL      // Imprime o canal Wi-Fi configurado no boot
+// #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
 
 //═════════ ALTERAR POR CONJUNTO ═════════                  
-const uint8_t ID = 8;               
-const int CANAL_ESPECIFICO = 13;     
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0x09, 0x70};
+const uint8_t ID = 4;               
+const int CANAL_ESPECIFICO = 4;     
+uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0xEB, 0x64}; 
 const int delay_time = 10;         
 const int touch_sensitivity = 20;   
 const int callibration_time = 6;  
@@ -47,7 +49,7 @@ esp_err_t setChannel(int channel) {
     esp_err_t result = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false); 
 
-    #ifdef DEBUG
+    #ifdef PRINT_CANAL
         uint8_t primaryChan;
         wifi_second_chan_t secondChan;
         esp_wifi_get_channel(&primaryChan, &secondChan);
@@ -62,24 +64,17 @@ void setup() {
     setCpuFrequencyMhz(80);
     Wire.begin();  
     Wire.setClock(400000);
-
-    #ifdef DEBUG
-        Serial.begin(115200);
-    #endif
-
+    Serial.begin(115200);
     mpu.initialize();
-    #ifdef DEBUG
-        Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-    #endif
-
+    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1098); 
-        mpu.setXGyroOffset(177);    
-        mpu.setYGyroOffset(78);    
-        mpu.setZGyroOffset(1);  
+        mpu.setZAccelOffset(1592); 
+        mpu.setXGyroOffset(161);    
+        mpu.setYGyroOffset(-39);    
+        mpu.setZGyroOffset(49);  
     #endif
 
     if (dev_status == 0) {
@@ -101,7 +96,7 @@ void setup() {
     esp_wifi_set_max_tx_power(82);
     esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L); 
 
-    #ifdef DEBUG
+    #ifdef PRINT_MAC
         Serial.print("MAC deste dispositivo: ");
         uint8_t mac[6];
         esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -145,7 +140,17 @@ void loop() {
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
  
         esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
- 
+
+        #ifdef PRINT_SENSOR
+            char buf[64];
+            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
+                     message.id,
+                     message.gyro,
+                     message.accel,
+                     message.touch);
+            Serial.println(buf);
+        #endif
+
         #ifdef USE_DELAY
             delay(delay_time);
         #endif

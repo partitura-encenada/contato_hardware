@@ -11,9 +11,9 @@
 // #define AUTO_CALLIBRATION 
 
 //═════════ ALTERAR POR CONJUNTO ═════════                  
-const uint8_t ID = 8;               
+const uint8_t ID = 7;               
 const int CANAL_ESPECIFICO = 13;     
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0x09, 0x70};
+uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0x12, 0xC8}; 
 const int delay_time = 10;         
 const int touch_sensitivity = 20;   
 const int callibration_time = 6;  

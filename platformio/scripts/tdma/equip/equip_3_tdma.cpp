@@ -7,7 +7,7 @@
 #include "esp_log.h"
 
 // ═════════ Defines ═════════
-// #define DEBUG
+#define DEBUG
 // #define USE_DELAY
 // #define AUTO_CALLIBRATION
 
@@ -81,6 +81,10 @@ void setup() {
     mpu.initialize();
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
+
+    // Limpa FIFO acumulado no boot
+    delay(100);
+    mpu.resetFIFO();
 
     #ifndef AUTO_CALLIBRATION
         mpu.setZAccelOffset(1590);

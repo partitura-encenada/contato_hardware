@@ -1,35 +1,34 @@
-// ═════════ BASE MESTRE TDMA ═════════
-// Envia beacon de sincronização para todos os equips
-// Cada equip recebe o beacon e calcula seu slot de transmissão
-// Canal 8, ciclo de 12ms (6 slots × 2ms cada)
+//═════════ Bibliotecas ═════════
+#include <esp_now.h>                    
+#include <WiFi.h>                       
+#include "Wire.h"                      
+#include "esp_wifi.h"   
 
-#include <esp_now.h>
-#include <WiFi.h>
-#include "esp_wifi.h"
-#include "esp_log.h"
+//═════════ ALTERAR POR CONJUNTO ═════════   
+const int CANAL_ESPECIFICO = 8;     
+uint8_t macTransmissor[] = {0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4};
 
-const int CANAL = 8;
-const int NUM_EQUIPS = 6;
-const int SLOT_MS = 1;                        // 1ms por slot
-const int CICLO_MS = NUM_EQUIPS * SLOT_MS;    // 6ms por ciclo completo
-
-// Endereço de broadcast para todos os equips
-uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
-// Estrutura do beacon
+//═════════ Struct da mensagem ESP-NOW ═════════
 typedef struct {
-    uint8_t slot_atual;   // slot que está sendo aberto (0 a 5)
-    uint32_t timestamp;   // timestamp do ciclo
-} beacon_t;
-beacon_t beacon;
+    uint8_t  id;
+    int16_t  gyro;
+    int32_t  accel;
+    uint8_t  touch;
+} struct_message;
 
-esp_now_peer_info_t peerInfo;
+static struct_message MIDImessage;
+static struct_message bufferMessage;
+volatile bool newData = false;
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; // mutex contra race condition
 
-esp_err_t setChannel(int channel) {
-    esp_wifi_set_promiscuous(true);
-    esp_err_t result = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_set_promiscuous(false);
-    return result;
+void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
+    if (memcmp(mac_addr, macTransmissor, 6) != 0) return;
+    if (len != sizeof(struct_message)) return; // descarta pacote com tamanho errado
+
+    portENTER_CRITICAL_ISR(&mux);
+    memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
+    newData = true;
+    portEXIT_CRITICAL_ISR(&mux);
 }
 
 void setup() {
@@ -37,36 +36,33 @@ void setup() {
     esp_log_level_set("*", ESP_LOG_NONE);
 
     WiFi.mode(WIFI_STA);
-    setChannel(CANAL);
     esp_wifi_set_max_tx_power(82);
+    esp_wifi_set_promiscuous(true);
+    esp_wifi_set_channel(CANAL_ESPECIFICO, WIFI_SECOND_CHAN_NONE);
+    esp_wifi_set_promiscuous(false);
+    // Preâmbulo longo: deve ser igual ao do equip
     esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("Erro ao inicializar ESP-NOW");
         return;
     }
-
-    // Adiciona peer broadcast
-    memset(&peerInfo, 0, sizeof(peerInfo));
-    memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;
-    peerInfo.encrypt = false;
-    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-        Serial.println("Erro ao adicionar peer");
-        return;
-    }
-
-    Serial.println("Base mestre TDMA iniciada!");
-    Serial.print("Canal: "); Serial.println(CANAL);
-    Serial.print("Ciclo: "); Serial.print(CICLO_MS); Serial.println("ms");
-    Serial.print("Slot: "); Serial.print(SLOT_MS); Serial.println("ms");
+    esp_now_register_recv_cb(OnDataRecv);
 }
 
 void loop() {
-    for (int slot = 0; slot < NUM_EQUIPS; slot++) {
-        beacon.slot_atual = slot;
-        beacon.timestamp = millis();
-        esp_now_send(broadcastAddress, (uint8_t *)&beacon, sizeof(beacon));
-        delay(SLOT_MS);
+    if (newData) {
+        portENTER_CRITICAL(&mux);
+        memcpy(&bufferMessage, &MIDImessage, sizeof(MIDImessage));
+        newData = false;
+        portEXIT_CRITICAL(&mux);
+
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%d/%d/%d/%d",
+                 bufferMessage.id,
+                 bufferMessage.gyro,
+                 bufferMessage.accel,
+                 bufferMessage.touch);
+        Serial.println(buf);
     }
 }

@@ -7,7 +7,7 @@
 #include "esp_log.h"
 
 // ═════════ Defines ═════════
-// #define DEBUG
+#define DEBUG
 // #define USE_DELAY
 // #define AUTO_CALLIBRATION
 

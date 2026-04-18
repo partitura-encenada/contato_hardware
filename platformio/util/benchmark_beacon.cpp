@@ -35,7 +35,7 @@ typedef struct {
     int16_t  gyro;
     int32_t  accel;
     uint8_t  touch;
-    uint16_t seq;   // contador de sequência para benchmark
+    uint32_t seq;   // contador de sequência para benchmark
 } message_t;
 
 // ═════════ Variáveis MPU6050 ═════════
@@ -54,7 +54,7 @@ float       ypr[3];
 message_t        message;
 esp_now_peer_info_t peerInfo;
 volatile bool    meu_slot_aberto = false;
-uint16_t         seq_counter     = 0;
+uint32_t         seq_counter     = 0;
 
 // ═════════ Callback beacon ═════════
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {

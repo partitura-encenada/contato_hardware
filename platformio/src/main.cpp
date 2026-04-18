@@ -1,190 +1,115 @@
-// ═════════ Bibliotecas ═════════
-#include "MPU6050_6Axis_MotionApps20.h"
+// ═════════ BASE_3 BENCHMARK ═════════
+// Conta pacotes recebidos vs esperados e mede taxa de perda real
+// Usar com equip_3_tdma_benchmark e relogio ligados
+// Canal 8, imprime estatísticas a cada 10 segundos
+
 #include <esp_now.h>
 #include <WiFi.h>
-#include "Wire.h"
 #include "esp_wifi.h"
 #include "esp_log.h"
 
-// ═════════ Defines ═════════
-// #define USE_DELAY
-// #define AUTO_CALLIBRATION
-// #define PRINT_MAC
-// #define PRINT_CANAL
-// #define PRINT_SENSOR
+const int CANAL = 8;
 
-// ═════════ ALTERAR POR CONJUNTO ═════════
-const uint8_t ID       = 3;
-const uint8_t MEU_SLOT = 0;           // slot 0 = equip 3
-const int     CANAL    = 8;
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0xE6, 0x88}; // MAC da base_3
-const int delay_time       = 10;
-const int touch_sensitivity = 20;
-const int callibration_time = 6;
-
-// ═════════ Struct beacon ═════════
-typedef struct {
-    uint8_t  slot_atual;
-    uint32_t timestamp;
-} beacon_t;
+// MAC do equip_3
+uint8_t macTransmissor[] = {0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4};
 
 // ═════════ Struct mensagem ═════════
-// seq adicionado para benchmark — remova após os testes se quiser
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
     int32_t  accel;
     uint8_t  touch;
-    uint16_t seq;   // contador de sequência para benchmark
+    uint32_t seq;
 } message_t;
 
-// ═════════ Variáveis MPU6050 ═════════
-MPU6050 mpu;
-uint8_t     dev_status;
-uint16_t    packet_size;
-uint16_t    fifo_count;
-uint8_t     fifo_buffer[64];
-Quaternion  q;
-VectorInt16 aa;
-VectorInt16 aaReal;
-VectorFloat gravity;
-bool        dmp_ready = false;
-float       ypr[3];
+// ═════════ Variáveis de contagem ═════════
+volatile uint32_t ultimo_seq         = 0;
+volatile uint32_t pacotes_recebidos  = 0;
+volatile uint32_t pacotes_perdidos   = 0;
+volatile uint32_t gaps_maximos       = 0; // maior gap consecutivo
+volatile bool     primeiro_pacote    = true;
+volatile uint32_t gap_atual          = 0;
 
-message_t        message;
-esp_now_peer_info_t peerInfo;
-volatile bool    meu_slot_aberto = false;
-uint16_t         seq_counter     = 0;
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
-// ═════════ Callback beacon ═════════
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-    if (len != sizeof(beacon_t)) return;
-    beacon_t beacon;
-    memcpy(&beacon, incomingData, sizeof(beacon_t));
-    if (beacon.slot_atual == MEU_SLOT) {
-        meu_slot_aberto = true;
+    if (memcmp(mac_addr, macTransmissor, 6) != 0) return;
+    if (len != sizeof(message_t)) return;
+
+    message_t msg;
+    memcpy(&msg, incomingData, sizeof(message_t));
+
+    portENTER_CRITICAL_ISR(&mux);
+
+    if (primeiro_pacote) {
+        ultimo_seq      = msg.seq;
+        primeiro_pacote = false;
+        pacotes_recebidos++;
+    } else {
+        uint32_t esperado = ultimo_seq + 1;
+        uint32_t gap      = msg.seq - esperado; // funciona com overflow de uint32
+
+        if (gap == 0) {
+            // chegou em ordem, sem perda
+            gap_atual = 0;
+        } else {
+            // houve perda
+            pacotes_perdidos += gap;
+            gap_atual        += gap;
+            if (gap_atual > gaps_maximos) gaps_maximos = gap_atual;
+        }
+
+        ultimo_seq = msg.seq;
+        pacotes_recebidos++;
     }
+
+    portEXIT_CRITICAL_ISR(&mux);
 }
 
-// ═════════ setChannel ═════════
 esp_err_t setChannel(int channel) {
     esp_wifi_set_promiscuous(true);
     esp_err_t result = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false);
-
-    #ifdef PRINT_CANAL
-        uint8_t primaryChan;
-        wifi_second_chan_t secondChan;
-        esp_wifi_get_channel(&primaryChan, &secondChan);
-        Serial.print("Canal real configurado: ");
-        Serial.println(primaryChan);
-    #endif
     return result;
 }
 
-// ═════════ setup ═════════
 void setup() {
-    setCpuFrequencyMhz(80);
-    Wire.begin();
-    Wire.setClock(400000);
     Serial.begin(115200);
     esp_log_level_set("*", ESP_LOG_NONE);
-
-    mpu.initialize();
-    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-
-    dev_status = mpu.dmpInitialize();
-    mpu.setDMPEnabled(true);
-
-    #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1590);
-        mpu.setXGyroOffset(166);
-        mpu.setYGyroOffset(-44);
-        mpu.setZGyroOffset(49);
-    #endif
-
-    if (dev_status == 0) {
-        #ifdef AUTO_CALLIBRATION
-            mpu.CalibrateAccel(callibration_time);
-            mpu.CalibrateGyro(callibration_time);
-            mpu.PrintActiveOffsets();
-        #endif
-        dmp_ready   = true;
-        packet_size = mpu.dmpGetFIFOPacketSize();
-    } else {
-        Serial.print(F("DMP Initialization failed (code "));
-        Serial.print(dev_status);
-    }
-
-    delay(100);
-    mpu.resetFIFO();
 
     WiFi.mode(WIFI_STA);
     setChannel(CANAL);
     esp_wifi_set_max_tx_power(82);
     esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
 
-    #ifdef PRINT_MAC
-        Serial.print("MAC deste dispositivo: ");
-        uint8_t mac[6];
-        esp_read_mac(mac, ESP_MAC_WIFI_STA);
-        for (int i = 0; i < 6; i++) {
-            Serial.print("0x");
-            if (mac[i] < 0x10) Serial.print("0");
-            Serial.print(mac[i], HEX);
-            if (i < 5) Serial.print(", ");
-        }
-        Serial.println();
-    #endif
-
     if (esp_now_init() != ESP_OK) {
-        Serial.println("Error initializing ESP-NOW");
+        Serial.println("Erro ao inicializar ESP-NOW");
         return;
     }
 
     esp_now_register_recv_cb(OnDataRecv);
-
-    peerInfo = {};
-    memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;
-    peerInfo.encrypt = false;
-    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-        Serial.println("Failed to add peer");
-        return;
-    }
-
-    Serial.println("equip_3 TDMA benchmark pronto!");
+    Serial.println("base_3 benchmark pronto — aguardando pacotes...");
+    Serial.println("Estatísticas impressas a cada 10 segundos");
+    Serial.println("══════════════════════════════════════════");
 }
 
-// ═════════ loop ═════════
 void loop() {
-    if (!dmp_ready) return;
+    delay(10000); // imprime a cada 10 segundos
 
-    if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) {
-        mpu.dmpGetQuaternion(&q, fifo_buffer);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetAccel(&aa, fifo_buffer);
-        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+    portENTER_CRITICAL(&mux);
+    uint32_t recebidos  = pacotes_recebidos;
+    uint32_t perdidos   = pacotes_perdidos;
+    uint32_t gap_max    = gaps_maximos;
+    uint32_t total      = recebidos + perdidos;
+    portEXIT_CRITICAL(&mux);
 
-        message.id    = ID;
-        message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
-        message.accel = (int32_t)aaReal.x;
-        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+    float taxa_perda = total > 0 ? (float)perdidos / total * 100.0 : 0.0;
 
-        #ifdef PRINT_SENSOR
-            char buf[64];
-            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d seq:%d",
-                     message.id, message.gyro, message.accel, message.touch, message.seq);
-            Serial.println(buf);
-        #endif
-    } else {
-        delay(1);
-    }
-
-    if (meu_slot_aberto) {
-        meu_slot_aberto = false;
-        message.seq     = seq_counter++;
-        esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
-    }
+    Serial.println("══════════ ESTATÍSTICAS ══════════");
+    Serial.print("Recebidos  : "); Serial.println(recebidos);
+    Serial.print("Perdidos   : "); Serial.println(perdidos);
+    Serial.print("Total esp. : "); Serial.println(total);
+    Serial.print("Taxa perda : "); Serial.print(taxa_perda, 2); Serial.println(" %");
+    Serial.print("Maior gap  : "); Serial.print(gap_max); Serial.println(" pacotes consecutivos");
+    Serial.println("══════════════════════════════════");
 }

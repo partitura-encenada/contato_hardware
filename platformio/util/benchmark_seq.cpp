@@ -19,11 +19,11 @@ typedef struct {
     int16_t  gyro;
     int32_t  accel;
     uint8_t  touch;
-    uint16_t seq;
+    uint32_t seq;
 } message_t;
 
 // ═════════ Variáveis de contagem ═════════
-volatile uint16_t ultimo_seq         = 0;
+volatile uint32_t ultimo_seq         = 0;
 volatile uint32_t pacotes_recebidos  = 0;
 volatile uint32_t pacotes_perdidos   = 0;
 volatile uint32_t gaps_maximos       = 0; // maior gap consecutivo
@@ -46,8 +46,8 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
         primeiro_pacote = false;
         pacotes_recebidos++;
     } else {
-        uint16_t esperado = ultimo_seq + 1;
-        uint16_t gap      = msg.seq - esperado; // funciona com overflow de uint16
+        uint32_t esperado = ultimo_seq + 1;
+        uint32_t gap      = msg.seq - esperado; // funciona com overflow de uint32
 
         if (gap == 0) {
             // chegou em ordem, sem perda

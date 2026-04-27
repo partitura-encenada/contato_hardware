@@ -5,7 +5,7 @@
 #include "esp_wifi.h"   
 
 //═════════ ALTERAR POR CONJUNTO ═════════   
-const int CANAL_ESPECIFICO = 8;     
+const int CANAL_ESPECIFICO = 1;     
 uint8_t macTransmissor[] = {0x68, 0x25, 0xDD, 0x33, 0xE1, 0xE8};
 
 //═════════ Struct da mensagem ESP-NOW ═════════

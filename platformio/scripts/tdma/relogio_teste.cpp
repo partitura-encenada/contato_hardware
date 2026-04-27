@@ -7,9 +7,9 @@
 #include "esp_wifi.h"
 #include "esp_log.h"
 
-const int      CANAL      = 8;
+const int      CANAL      = 1;
 const int      NUM_EQUIPS = 6;
-const uint32_t SLOT_US    = 1400; // ← altere aqui para testar diferentes slots
+const uint32_t SLOT_US    = 1500; // ← altere aqui para testar diferentes slots
 
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 

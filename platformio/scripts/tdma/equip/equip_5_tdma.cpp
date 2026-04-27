@@ -16,7 +16,7 @@
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const uint8_t ID = 5;
 const uint8_t MEU_SLOT = 2;           // slot 2 = equip 5
-const int CANAL = 8;
+const int CANAL = 1;
 uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; // MAC da base_5
 const int delay_time = 10;
 const int touch_sensitivity = 20;
@@ -95,10 +95,10 @@ void setup() {
 
     // Offsets antes do resetFIFO — ordem correta
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(2614);
-        mpu.setXGyroOffset(18);
-        mpu.setYGyroOffset(12);
-        mpu.setZGyroOffset(35);
+        mpu.setZAccelOffset(1590);
+        mpu.setXGyroOffset(166);
+        mpu.setYGyroOffset(-44);
+        mpu.setZGyroOffset(49);
     #endif
 
     if (dev_status == 0) {

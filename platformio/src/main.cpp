@@ -14,10 +14,10 @@
 // #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
-const uint8_t ID = 8;
-const uint8_t MEU_SLOT = 5;           // slot 5 = equip 8
-const int CANAL = 8;
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0x09, 0x70}; // MAC da base_8
+const uint8_t ID = 5;
+const uint8_t MEU_SLOT = 2;           // slot 2 = equip 5
+const int CANAL = 1;
+uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; // MAC da base_5
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
@@ -95,10 +95,10 @@ void setup() {
 
     // Offsets antes do resetFIFO — ordem correta
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1098);
-        mpu.setXGyroOffset(177);
-        mpu.setYGyroOffset(78);
-        mpu.setZGyroOffset(1);
+        mpu.setZAccelOffset(1590);
+        mpu.setXGyroOffset(166);
+        mpu.setYGyroOffset(-44);
+        mpu.setZGyroOffset(49);
     #endif
 
     if (dev_status == 0) {

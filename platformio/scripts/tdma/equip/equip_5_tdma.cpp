@@ -95,10 +95,10 @@ void setup() {
 
     // Offsets antes do resetFIFO — ordem correta
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1062);
-        mpu.setXGyroOffset(62);
-        mpu.setYGyroOffset(-1);
-        mpu.setZGyroOffset(24);
+        mpu.setZAccelOffset(2614);
+        mpu.setXGyroOffset(18);
+        mpu.setYGyroOffset(12);
+        mpu.setZGyroOffset(35);
     #endif
 
     if (dev_status == 0) {

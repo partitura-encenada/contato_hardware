@@ -14,10 +14,10 @@
 // #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
-const uint8_t ID = 3;
-const uint8_t MEU_SLOT = 0;           // slot 0 = equip 3
+const uint8_t ID = 1;
+const uint8_t MEU_SLOT = 1;           // slot 1 = equip 4
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0xE6, 0x88}; // MAC da base_3
+uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0xEB, 0x64}; // MAC da base_4
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
@@ -95,9 +95,9 @@ void setup() {
 
     // Offsets antes do resetFIFO — ordem correta
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1590);
-        mpu.setXGyroOffset(166);
-        mpu.setYGyroOffset(-44);
+        mpu.setZAccelOffset(1592);
+        mpu.setXGyroOffset(161);
+        mpu.setYGyroOffset(-39);
         mpu.setZGyroOffset(49);
     #endif
 
@@ -159,14 +159,6 @@ void setup() {
 void loop() {
     if (!dmp_ready) return;
 
-    // Verifica slot primeiro — não depende do FIFO estar pronto
-    // Envia o dado mais recente disponível imediatamente quando o beacon chega
-    if (meu_slot_aberto) {
-        meu_slot_aberto = false;
-        esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
-    }
-
-    // Atualiza dados do sensor em paralelo
     if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) {
         mpu.dmpGetQuaternion(&q, fifo_buffer);
         mpu.dmpGetGravity(&gravity, &q);
@@ -185,6 +177,13 @@ void loop() {
                      message.id, message.gyro, message.accel, message.touch);
             Serial.println(buf);
         #endif
+    } else {
+        delay(1);
     }
-    // sem delay(1) — loop roda livre para não perder beacons
+
+    // Transmite apenas quando a base mestre abrir o slot
+    if (meu_slot_aberto) {
+        meu_slot_aberto = false;
+        esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
+    }
 }

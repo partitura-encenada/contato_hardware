@@ -15,9 +15,9 @@
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const uint8_t ID = 2;
-const uint8_t MEU_SLOT = 2;           // slot 1 = equip 4
+const uint8_t MEU_SLOT = 2;        
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0xEB, 0x64}; // MAC da base_4
+uint8_t broadcastAddress[] = {0x78, 0xE3, 0x6D, 0xD8, 0x16, 0xD4};
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;

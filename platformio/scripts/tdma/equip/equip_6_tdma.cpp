@@ -17,7 +17,7 @@
 const uint8_t ID = 6;
 const uint8_t MEU_SLOT = 3;           // slot 3 = equip 6
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x30, 0x2B, 0x58}; // MAC da base_6
+uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0x62, 0x10}; // MAC da base_6
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;

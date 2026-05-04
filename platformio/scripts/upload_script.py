@@ -12,6 +12,7 @@ if not script_name:
 # Pastas onde procurar o script
 project_dir = env["PROJECT_DIR"]
 search_dirs = [
+    os.path.join(project_dir, "util"),
     os.path.join(project_dir, "scripts", "equip"),
     os.path.join(project_dir, "scripts", "base"),
     os.path.join(project_dir, "scripts", "tdma"),

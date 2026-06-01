@@ -14,6 +14,7 @@
 // #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
+const int LED_AZUL = 2;
 const uint8_t ID = 3;
 const uint8_t MEU_SLOT = 0;           // slot 0 = equip 3
 const int CANAL = 1;
@@ -100,6 +101,7 @@ void setup() {
     Wire.begin();
     Wire.setClock(400000);
     Serial.begin(115200);
+    pinMode(LED_AZUL, OUTPUT);
     esp_log_level_set("*", ESP_LOG_NONE);
 
     mpu.initialize();
@@ -185,6 +187,11 @@ void loop() {
         message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
         message.accel = (int32_t)aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+
+        digitalWrite(
+            LED_AZUL,
+            transmissaoAtiva && message.touch
+        );
 
         #ifdef PRINT_SENSOR
             char buf[64];

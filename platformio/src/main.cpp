@@ -1,119 +1,213 @@
-//═════════ Bibliotecas ═════════
-#include <esp_now.h>                    
-#include <WiFi.h>                       
-#include "esp_wifi.h"    
+// ═════════ Bibliotecas ═════════
+#include "MPU6050_6Axis_MotionApps20.h"
+#include <esp_now.h>
+#include <WiFi.h>
+#include "Wire.h"
+#include "esp_wifi.h"
+#include "esp_log.h"
 
-//═════════ ALTERAR POR CONJUNTO ═════════   
-const int CANAL_ESPECIFICO = 1;     
-uint8_t macTransmissor[] = {0x3C, 0x8A, 0x1F, 0x80, 0x76, 0xA4}; 
-const uint8_t BASE_ID = 7;
+// ═════════ Defines ═════════
+// #define USE_DELAY
+// #define AUTO_CALLIBRATION
+// #define PRINT_MAC        // Imprime o MAC deste dispositivo no boot
+// #define PRINT_CANAL      // Imprime o canal Wi-Fi configurado no boot
+// #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
 
-//═════════ Struct da mensagem ESP-NOW ═════════
+// ═════════ ALTERAR POR CONJUNTO ═════════
+const int LED_AZUL = 2;
+const uint8_t ID = 3;
+const uint8_t MEU_SLOT = 0;           // slot 0 = equip 3
+const int CANAL = 1;
+uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0xE6, 0x88}; // MAC da base_3
+const int delay_time = 10;
+const int touch_sensitivity = 20;
+const int callibration_time = 6;
+
+// ═════════ Struct beacon da base mestre ═════════
+typedef struct {
+    uint8_t slot_atual;
+    uint32_t timestamp;
+} beacon_t;
+
+// ═════════ Struct mensagem para base individual ═════════
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
     int32_t  accel;
     uint8_t  touch;
-} struct_message;
+} message_t;
 
-static struct_message MIDImessage;
-static struct_message bufferMessage;
-volatile bool newData = false;
-bool serialAtivo = false; // só imprime depois que contato_cli mandar START
-uint32_t ultimoReenvio = 0;
+// ═════════ Variáveis MPU6050 ═════════
+MPU6050 mpu;
+uint8_t     dev_status;
+uint16_t    packet_size;
+uint16_t    fifo_count;
+uint8_t     fifo_buffer[64];
+Quaternion  q;
+VectorInt16 aa;
+VectorInt16 aaReal;
+VectorFloat gravity;
+bool        dmp_ready = false;
+float       ypr[3];
 
+message_t message;
+esp_now_peer_info_t peerInfo;
+volatile bool meu_slot_aberto = false;
+volatile bool transmissaoAtiva = false;
+
+// ═════════ Struct controle da base individual ═════════
 typedef struct {
     uint8_t ativo;
 } controle_t;
 
-esp_now_peer_info_t peerEquip;
-portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; // mutex contra race condition
-
-void enviarControle(uint8_t ativo) {
-    controle_t ctrl;
-    ctrl.ativo = ativo;
-    esp_now_send(macTransmissor, (uint8_t *)&ctrl, sizeof(ctrl));
-}
-
+// ═════════ Callback beacon/controle ═════════
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-    if (memcmp(mac_addr, macTransmissor, 6) != 0) return;
-    if (len != sizeof(struct_message)) return; // descarta pacote com tamanho errado
-
-    portENTER_CRITICAL_ISR(&mux);
-    memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
-    newData = true;
-    portEXIT_CRITICAL_ISR(&mux);
-}
-
-void setup() {
-    Serial.begin(115200);
-    Serial.setTimeout(1);
-
-
-    esp_log_level_set("*", ESP_LOG_NONE);
-
-    WiFi.mode(WIFI_STA);
-    esp_wifi_set_max_tx_power(82);
-    esp_wifi_set_promiscuous(true);
-    esp_wifi_set_channel(CANAL_ESPECIFICO, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_set_promiscuous(false);
-    // Preâmbulo longo: deve ser igual ao do equip
-    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
-
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("Erro ao inicializar ESP-NOW");
+    if (len == sizeof(beacon_t)) {
+        beacon_t beacon;
+        memcpy(&beacon, incomingData, sizeof(beacon_t));
+        if (beacon.slot_atual == MEU_SLOT) {
+            meu_slot_aberto = true;
+        }
         return;
     }
-    esp_now_register_recv_cb(OnDataRecv);
 
-    memset(&peerEquip, 0, sizeof(peerEquip));
-    memcpy(peerEquip.peer_addr, macTransmissor, 6);
-    peerEquip.channel = 0;
-    peerEquip.encrypt = false;
-    esp_now_add_peer(&peerEquip);
+    if (len == sizeof(controle_t)) {
+        controle_t controle;
+        memcpy(&controle, incomingData, sizeof(controle_t));
+        transmissaoAtiva = (controle.ativo == 1);
+        return;
+    }
 }
 
+// ═════════ setChannel ═════════
+esp_err_t setChannel(int channel) {
+    esp_wifi_set_promiscuous(true);
+    esp_err_t result = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    esp_wifi_set_promiscuous(false);
+
+    #ifdef PRINT_CANAL
+        uint8_t primaryChan;
+        wifi_second_chan_t secondChan;
+        esp_wifi_get_channel(&primaryChan, &secondChan);
+        Serial.print("Canal real configurado: ");
+        Serial.println(primaryChan);
+    #endif
+    return result;
+}
+
+// ═════════ setup ═════════
+void setup() {
+    setCpuFrequencyMhz(80);
+    Wire.begin();
+    Wire.setClock(400000);
+    Serial.begin(115200);
+    pinMode(LED_AZUL, OUTPUT);
+    esp_log_level_set("*", ESP_LOG_NONE);
+
+    mpu.initialize();
+    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+
+    dev_status = mpu.dmpInitialize();
+    mpu.setDMPEnabled(true);
+
+    // Offsets antes do resetFIFO — ordem correta
+    #ifndef AUTO_CALLIBRATION
+        mpu.setZAccelOffset(1590);
+        mpu.setXGyroOffset(166);
+        mpu.setYGyroOffset(-44);
+        mpu.setZGyroOffset(49);
+    #endif
+
+    if (dev_status == 0) {
+        #ifdef AUTO_CALLIBRATION
+            mpu.CalibrateAccel(callibration_time);
+            mpu.CalibrateGyro(callibration_time);
+            mpu.PrintActiveOffsets();
+        #endif
+        dmp_ready = true;
+        packet_size = mpu.dmpGetFIFOPacketSize();
+    } else {
+        Serial.print(F("DMP Initialization failed (code "));
+        Serial.print(dev_status);
+    }
+
+    // Limpa FIFO acumulado após calibração
+    delay(100);
+    mpu.resetFIFO();
+
+    WiFi.mode(WIFI_STA);
+    setChannel(CANAL);
+    esp_wifi_set_max_tx_power(82);
+    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
+
+    #ifdef PRINT_MAC
+        Serial.print("MAC deste dispositivo: ");
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_STA);
+        for (int i = 0; i < 6; i++) {
+            Serial.print("0x");
+            if (mac[i] < 0x10) Serial.print("0");
+            Serial.print(mac[i], HEX);
+            if (i < 5) Serial.print(", ");
+        }
+        Serial.println();
+    #endif
+
+    if (esp_now_init() != ESP_OK) {
+        Serial.println("Error initializing ESP-NOW");
+        return;
+    }
+
+    // Recebe beacon da base mestre
+    esp_now_register_recv_cb(OnDataRecv);
+
+    // Peer da base individual
+    peerInfo = {};
+    memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+    peerInfo.channel = 0;
+    peerInfo.encrypt = false;
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+        Serial.println("Failed to add peer");
+        return;
+    }
+}
+
+// ═════════ loop ═════════
 void loop() {
-// Comando não bloqueante vindo do contato_cli: START / STOP
-    if (Serial.available() > 0) {
-        char cmd[16] = {0};
+    if (!dmp_ready) return;
 
-        Serial.readBytesUntil('\n', cmd, sizeof(cmd) - 1);
+    if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) {
+        mpu.dmpGetQuaternion(&q, fifo_buffer);
+        mpu.dmpGetGravity(&gravity, &q);
+        mpu.dmpGetAccel(&aa, fifo_buffer);
+        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+        mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
 
-        if (strcmp(cmd, "START") == 0) {
-            serialAtivo = true;
-            enviarControle(1);
-            ultimoReenvio = millis();
-        } 
-        else if (strcmp(cmd, "STOP") == 0) {
-            serialAtivo = false;
-            enviarControle(0);
-        }
-        else if (strcmp(cmd, "ID?") == 0) {
-            Serial.print("ID/");
-            Serial.println(BASE_ID);
-        }
-    }
-    if (serialAtivo && (millis() - ultimoReenvio >= 2000)) {
-        ultimoReenvio = millis();
-        enviarControle(1);
-    }
-    if (newData) {
-        portENTER_CRITICAL(&mux);
-        memcpy(&bufferMessage, &MIDImessage, sizeof(MIDImessage));
-        newData = false;
-        portEXIT_CRITICAL(&mux);
+        message.id    = ID;
+        message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
+        message.accel = (int32_t)aaReal.x;
+        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
 
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%d/%d/%d/%d",
-                 bufferMessage.id,
-                 bufferMessage.gyro,
-                 bufferMessage.accel,
-                 bufferMessage.touch);
+        digitalWrite(
+            LED_AZUL,
+            transmissaoAtiva && message.touch
+        );
 
-        int len = strlen(buf) + 2;
-        if (serialAtivo && Serial.availableForWrite() >= len) {
+        #ifdef PRINT_SENSOR
+            char buf[64];
+            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
+                     message.id, message.gyro, message.accel, message.touch);
             Serial.println(buf);
+        #endif
+    } else {
+        delay(1);
+    }
+
+    // Transmite apenas quando a base mestre abrir o slot
+    if (meu_slot_aberto) {
+        meu_slot_aberto = false;
+        if (transmissaoAtiva) {
+            esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
         }
     }
 }

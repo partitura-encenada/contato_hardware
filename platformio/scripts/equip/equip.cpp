@@ -10,7 +10,7 @@
 // #define AUTO_CALLIBRATION  // Ativa calibração automática do MPU no boot. Comente para usar offsets manuais
 // #define PRINT_MAC          // Imprime o MAC deste dispositivo no boot
 // #define PRINT_CANAL        // Imprime o canal Wi-Fi configurado no boot
-// #define PRINT_SENSOR       // Imprime os valores do sensor em tempo real
+#define PRINT_SENSOR       // Imprime os valores do sensor em tempo real
 
 //═════════ ALTERAR POR CONJUNTO ═════════                  
 const uint8_t ID = 3;                // Identificador único deste conjunto (3–8)

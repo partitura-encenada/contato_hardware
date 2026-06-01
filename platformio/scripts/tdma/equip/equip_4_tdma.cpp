@@ -14,6 +14,7 @@
 // #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
+const int LED_AZUL = 2;
 const uint8_t ID = 4;
 const uint8_t MEU_SLOT = 1;           // slot 1 = equip 4
 const int CANAL = 1;
@@ -22,7 +23,6 @@ const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
 
-// ═════════ Struct beacon da base mestre ═════════
 typedef struct {
     uint8_t slot_atual;
     uint32_t timestamp;
@@ -52,25 +52,29 @@ float       ypr[3];
 message_t message;
 esp_now_peer_info_t peerInfo;
 volatile bool meu_slot_aberto = false;
+volatile bool transmissaoAtiva = false;
 
+// ═════════ Struct controle da base individual ═════════
 typedef struct {
     uint8_t ativo;
-} ctrl_message;
-volatile bool ativo = false;
+} controle_t;
 
-// ═════════ Callback beacon ═════════
+// ═════════ Callback beacon/controle ═════════
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-    if (len == sizeof(ctrl_message)) {
-        ctrl_message ctrl;
-        memcpy(&ctrl, incomingData, sizeof(ctrl));
-        ativo = ctrl.ativo;
+    if (len == sizeof(beacon_t)) {
+        beacon_t beacon;
+        memcpy(&beacon, incomingData, sizeof(beacon_t));
+        if (beacon.slot_atual == MEU_SLOT) {
+            meu_slot_aberto = true;
+        }
         return;
     }
-    if (len != sizeof(beacon_t)) return;
-    beacon_t beacon;
-    memcpy(&beacon, incomingData, sizeof(beacon_t));
-    if (beacon.slot_atual == MEU_SLOT) {
-        meu_slot_aberto = true;
+
+    if (len == sizeof(controle_t)) {
+        controle_t controle;
+        memcpy(&controle, incomingData, sizeof(controle_t));
+        transmissaoAtiva = (controle.ativo == 1);
+        return;
     }
 }
 
@@ -96,6 +100,7 @@ void setup() {
     Wire.begin();
     Wire.setClock(400000);
     Serial.begin(115200);
+    pinMode(LED_AZUL, OUTPUT);
     esp_log_level_set("*", ESP_LOG_NONE);
 
     mpu.initialize();
@@ -182,6 +187,11 @@ void loop() {
         message.accel = (int32_t)aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
 
+        digitalWrite(
+            LED_AZUL,
+            transmissaoAtiva && message.touch
+        );
+
         #ifdef PRINT_SENSOR
             char buf[64];
             snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
@@ -195,7 +205,7 @@ void loop() {
     // Transmite apenas quando a base mestre abrir o slot
     if (meu_slot_aberto) {
         meu_slot_aberto = false;
-        if (ativo) {
+        if (transmissaoAtiva) {
             esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
         }
     }

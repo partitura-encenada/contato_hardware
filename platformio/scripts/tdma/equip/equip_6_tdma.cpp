@@ -14,12 +14,13 @@
 // #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
+const int LED_AZUL = 2;
 const uint8_t ID = 6;
 const uint8_t MEU_SLOT = 3;           // slot 3 = equip 6
 const int CANAL = 1;
 uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0x62, 0x10}; // MAC da base_6
 const int delay_time = 10;
-const int touch_sensitivity = 20;
+const int touch_sensitivity = 30;
 const int callibration_time = 6;
 
 // ═════════ Struct beacon da base mestre ═════════
@@ -100,6 +101,7 @@ void setup() {
     Wire.begin();
     Wire.setClock(400000);
     Serial.begin(115200);
+    pinMode(LED_AZUL, OUTPUT);
     esp_log_level_set("*", ESP_LOG_NONE);
 
     mpu.initialize();
@@ -185,6 +187,11 @@ void loop() {
         message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
         message.accel = (int32_t)aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+
+        digitalWrite(
+            LED_AZUL,
+            transmissaoAtiva && message.touch
+        );
 
         #ifdef PRINT_SENSOR
             char buf[64];

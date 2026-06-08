@@ -2,11 +2,10 @@
 #include <esp_now.h>                    
 #include <WiFi.h>                       
 #include "esp_wifi.h"   
-
-//═════════ Bibliotecas ═════════
 #include <esp_now.h>                    
 #include <WiFi.h>                       
 #include "esp_wifi.h"    
+#include <Preferences.h>
 
 //═════════ ALTERAR POR CONJUNTO ═════════   
 const int CANAL_ESPECIFICO = 1;     
@@ -33,6 +32,8 @@ static struct_message MIDImessage;
 static struct_message bufferMessage;
 volatile bool newData = false;
 bool serialAtivo = false; // só imprime depois que contato_cli mandar START
+Preferences prefs;
+bool modoDiscover = false;
 uint32_t ultimoReenvio = 0;
 
 typedef struct {
@@ -76,6 +77,12 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
     if (!temMacAtivo) {
         memcpy(macAtivo, mac_addr, 6);
         temMacAtivo = true;
+
+        if (modoDiscover) {
+            prefs.putBytes("mac", macAtivo, 6);
+            Serial.println("MAC_SAVED");
+            modoDiscover = false;
+        }
     }
 
     portENTER_CRITICAL_ISR(&mux);
@@ -86,6 +93,12 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
 
 void setup() {
     Serial.begin(115200);
+    prefs.begin("contato", false);
+
+    if (prefs.getBytesLength("mac") == 6) {
+        prefs.getBytes("mac", macAtivo, 6);
+        temMacAtivo = true;
+    }
     Serial.setTimeout(1);
 
     esp_log_level_set("*", ESP_LOG_NONE);
@@ -122,8 +135,11 @@ void loop() {
 
         if (strcmp(cmd, "START") == 0) {
             serialAtivo = true;
-            temMacAtivo = false;
-            enviarControleParaTodos(1);
+
+            if (temMacAtivo) {
+                enviarControle(1);
+            }
+
             ultimoReenvio = millis();
         } 
         else if (strcmp(cmd, "STOP") == 0) {
@@ -137,6 +153,11 @@ void loop() {
         else if (strcmp(cmd, "ID?") == 0) {
             Serial.print("ID/");
             Serial.println(BASE_ID);
+        }
+        else if (strcmp(cmd, "DISCOVER") == 0) {
+            temMacAtivo = false;
+            modoDiscover = true;
+            enviarControleParaTodos(1);
         }
     }
     if (serialAtivo && temMacAtivo && (millis() - ultimoReenvio >= 2000)) {

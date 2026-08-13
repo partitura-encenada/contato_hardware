@@ -2,22 +2,10 @@
 #include <esp_now.h>                    
 #include <WiFi.h>                       
 #include "esp_wifi.h"   
-#include <esp_now.h>                    
-#include <WiFi.h>                       
-#include "esp_wifi.h"    
-#include <Preferences.h>
 
 //═════════ ALTERAR POR CONJUNTO ═════════   
 const int CANAL_ESPECIFICO = 1;     
-uint8_t macTransmissores[][6] = {
-    {0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4}, // opção 1
-    {0x1C, 0x69, 0x20, 0xA3, 0xF0, 0xBC}  // opção 2
-};
-
-const int NUM_MACS = sizeof(macTransmissores) / sizeof(macTransmissores[0]);
-
-uint8_t macAtivo[6];
-bool temMacAtivo = false; 
+uint8_t macTransmissor[] = {0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4};
 const uint8_t BASE_ID = 3;
 
 //═════════ Struct da mensagem ESP-NOW ═════════
@@ -32,8 +20,6 @@ static struct_message MIDImessage;
 static struct_message bufferMessage;
 volatile bool newData = false;
 bool serialAtivo = false; // só imprime depois que contato_cli mandar START
-Preferences prefs;
-bool modoDiscover = false;
 uint32_t ultimoReenvio = 0;
 
 typedef struct {
@@ -43,47 +29,15 @@ typedef struct {
 esp_now_peer_info_t peerEquip;
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; // mutex contra race condition
 
-bool macEstaNaLista(const uint8_t *mac) {
-    for (int i = 0; i < NUM_MACS; i++) {
-        if (memcmp(mac, macTransmissores[i], 6) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void enviarControleParaMac(const uint8_t *mac, uint8_t ativo) {
+void enviarControle(uint8_t ativo) {
     controle_t ctrl;
     ctrl.ativo = ativo;
-    esp_now_send(mac, (uint8_t *)&ctrl, sizeof(ctrl));
-}
-
-void enviarControle(uint8_t ativo) {
-    if (temMacAtivo) {
-        enviarControleParaMac(macAtivo, ativo);
-    }
-}
-
-void enviarControleParaTodos(uint8_t ativo) {
-    for (int i = 0; i < NUM_MACS; i++) {
-        enviarControleParaMac(macTransmissores[i], ativo);
-    }
+    esp_now_send(macTransmissor, (uint8_t *)&ctrl, sizeof(ctrl));
 }
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-    if (!macEstaNaLista(mac_addr)) return;
+    if (memcmp(mac_addr, macTransmissor, 6) != 0) return;
     if (len != sizeof(struct_message)) return; // descarta pacote com tamanho errado
-
-    if (!temMacAtivo) {
-        memcpy(macAtivo, mac_addr, 6);
-        temMacAtivo = true;
-
-        if (modoDiscover) {
-            prefs.putBytes("mac", macAtivo, 6);
-            Serial.println("MAC_SAVED");
-            modoDiscover = false;
-        }
-    }
 
     portENTER_CRITICAL_ISR(&mux);
     memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
@@ -93,12 +47,6 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
 
 void setup() {
     Serial.begin(115200);
-    prefs.begin("contato", false);
-
-    if (prefs.getBytesLength("mac") == 6) {
-        prefs.getBytes("mac", macAtivo, 6);
-        temMacAtivo = true;
-    }
     Serial.setTimeout(1);
 
     esp_log_level_set("*", ESP_LOG_NONE);
@@ -117,13 +65,11 @@ void setup() {
     }
     esp_now_register_recv_cb(OnDataRecv);
 
-    for (int i = 0; i < NUM_MACS; i++) {
-        memset(&peerEquip, 0, sizeof(peerEquip));
-        memcpy(peerEquip.peer_addr, macTransmissores[i], 6);
-        peerEquip.channel = 0;
-        peerEquip.encrypt = false;
-        esp_now_add_peer(&peerEquip);
-    }
+    memset(&peerEquip, 0, sizeof(peerEquip));
+    memcpy(peerEquip.peer_addr, macTransmissor, 6);
+    peerEquip.channel = 0;
+    peerEquip.encrypt = false;
+    esp_now_add_peer(&peerEquip);
 }
 
 void loop() {
@@ -135,32 +81,19 @@ void loop() {
 
         if (strcmp(cmd, "START") == 0) {
             serialAtivo = true;
-
-            if (temMacAtivo) {
-                enviarControle(1);
-            }
-
+            enviarControle(1);
             ultimoReenvio = millis();
         } 
         else if (strcmp(cmd, "STOP") == 0) {
             serialAtivo = false;
-            if (temMacAtivo) {
-                enviarControle(0);
-            } else {
-                enviarControleParaTodos(0);
-            }
+            enviarControle(0);
         }
         else if (strcmp(cmd, "ID?") == 0) {
             Serial.print("ID/");
             Serial.println(BASE_ID);
         }
-        else if (strcmp(cmd, "DISCOVER") == 0) {
-            temMacAtivo = false;
-            modoDiscover = true;
-            enviarControleParaTodos(1);
-        }
     }
-    if (serialAtivo && temMacAtivo && (millis() - ultimoReenvio >= 2000)) {
+    if (serialAtivo && (millis() - ultimoReenvio >= 2000)) {
         ultimoReenvio = millis();
         enviarControle(1);
     }

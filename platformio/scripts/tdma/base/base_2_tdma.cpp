@@ -5,7 +5,8 @@
 
 //═════════ ALTERAR POR CONJUNTO ═════════   
 const int CANAL_ESPECIFICO = 1;     
-uint8_t macTransmissor[] = {0xF8, 0xB3, 0xB7, 0x50, 0xCC, 0xEC}; 
+uint8_t macTransmissor[] = {0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4};
+const uint8_t BASE_ID = 2;
 
 //═════════ Struct da mensagem ESP-NOW ═════════
 typedef struct {
@@ -47,6 +48,7 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
 void setup() {
     Serial.begin(115200);
     Serial.setTimeout(1);
+
     esp_log_level_set("*", ESP_LOG_NONE);
 
     WiFi.mode(WIFI_STA);
@@ -86,12 +88,15 @@ void loop() {
             serialAtivo = false;
             enviarControle(0);
         }
+        else if (strcmp(cmd, "ID?") == 0) {
+            Serial.print("ID/");
+            Serial.println(BASE_ID);
+        }
     }
     if (serialAtivo && (millis() - ultimoReenvio >= 2000)) {
         ultimoReenvio = millis();
         enviarControle(1);
     }
-
     if (newData) {
         portENTER_CRITICAL(&mux);
         memcpy(&bufferMessage, &MIDImessage, sizeof(MIDImessage));

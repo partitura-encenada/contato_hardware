@@ -9,15 +9,16 @@
 // ═════════ Defines ═════════
 // #define USE_DELAY
 // #define AUTO_CALLIBRATION
-// #define PRINT_MAC        // Imprime o MAC deste dispositivo no boot
-// #define PRINT_CANAL      // Imprime o canal Wi-Fi configurado no boot
-// #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
+// #define PRINT_MAC       
+// #define PRINT_CANAL    
+// #define PRINT_SENSOR    
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
-const uint8_t ID = 7;
-const uint8_t MEU_SLOT = 4;     
+const int LED_AZUL = 2;
+const uint8_t ID = 5;
+const uint8_t MEU_SLOT = 2;  
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0xCC, 0xDB, 0xA7, 0x91, 0x6D, 0x9C};
+uint8_t broadcastAddress[] = {0x88, 0x57, 0x21, 0xAD, 0x59, 0x40}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
@@ -100,6 +101,7 @@ void setup() {
     Wire.begin();
     Wire.setClock(400000);
     Serial.begin(115200);
+    pinMode(LED_AZUL, OUTPUT);
     esp_log_level_set("*", ESP_LOG_NONE);
 
     mpu.initialize();
@@ -185,6 +187,11 @@ void loop() {
         message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
         message.accel = (int32_t)aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+
+        digitalWrite(
+            LED_AZUL,
+            transmissaoAtiva && message.touch
+        );
 
         #ifdef PRINT_SENSOR
             char buf[64];

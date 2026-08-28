@@ -1,29 +1,3 @@
-<<<<<<< HEAD
-//═════════ Bibliotecas ═════════
-#include <esp_now.h>                    
-#include <WiFi.h>                       
-#include "esp_wifi.h"   
-
-//═════════ ALTERAR POR CONJUNTO ═════════   
-const int CANAL_ESPECIFICO = 1;     
-uint8_t macTransmissor[] = {0x84, 0x1F, 0xE8, 0x1C, 0x72, 0x5C};
-const uint8_t BASE_ID = 6;
-
-//═════════ Struct da mensagem ESP-NOW ═════════
-typedef struct {
-    uint8_t  id;
-    int16_t  gyro;
-    int32_t  accel;
-    uint8_t  touch;
-} struct_message;
-
-static struct_message MIDImessage;
-static struct_message bufferMessage;
-volatile bool newData = false;
-bool serialAtivo = false; // só imprime depois que contato_cli mandar START
-uint32_t ultimoReenvio = 0;
-
-=======
 // ═════════ Bibliotecas ═════════
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <esp_now.h>
@@ -41,10 +15,10 @@ uint32_t ultimoReenvio = 0;
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;
-const uint8_t ID = 9;
-const uint8_t MEU_SLOT = 5;     
+const uint8_t ID = 6;
+const uint8_t MEU_SLOT = 3;        
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0xCC, 0xDB, 0xA7, 0x91, 0x6D, 0x9C};
+uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x52, 0x36, 0x70};
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
@@ -59,9 +33,7 @@ typedef struct {
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
-    int32_t  accel_x;
-    int32_t  accel_y;
-    int32_t  accel_z;
+    int32_t  accel;
     uint8_t  touch;
 } message_t;
 
@@ -84,100 +56,10 @@ volatile bool meu_slot_aberto = false;
 volatile bool transmissaoAtiva = false;
 
 // ═════════ Struct controle da base individual ═════════
->>>>>>> ac997f0cdb5ee92caf6e6df37a8f0446e0be2f53
 typedef struct {
     uint8_t ativo;
 } controle_t;
 
-<<<<<<< HEAD
-esp_now_peer_info_t peerEquip;
-portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; // mutex contra race condition
-
-void enviarControle(uint8_t ativo) {
-    controle_t ctrl;
-    ctrl.ativo = ativo;
-    esp_now_send(macTransmissor, (uint8_t *)&ctrl, sizeof(ctrl));
-}
-
-void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-    if (memcmp(mac_addr, macTransmissor, 6) != 0) return;
-    if (len != sizeof(struct_message)) return; // descarta pacote com tamanho errado
-
-    portENTER_CRITICAL_ISR(&mux);
-    memcpy(&MIDImessage, incomingData, sizeof(MIDImessage));
-    newData = true;
-    portEXIT_CRITICAL_ISR(&mux);
-}
-
-void setup() {
-    Serial.begin(115200);
-    Serial.setTimeout(1);
-
-    esp_log_level_set("*", ESP_LOG_NONE);
-
-    WiFi.mode(WIFI_STA);
-    esp_wifi_set_max_tx_power(82);
-    esp_wifi_set_promiscuous(true);
-    esp_wifi_set_channel(CANAL_ESPECIFICO, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_set_promiscuous(false);
-    // Preâmbulo longo: deve ser igual ao do equip
-    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
-
-    if (esp_now_init() != ESP_OK) {
-        Serial.println("Erro ao inicializar ESP-NOW");
-        return;
-    }
-    esp_now_register_recv_cb(OnDataRecv);
-
-    memset(&peerEquip, 0, sizeof(peerEquip));
-    memcpy(peerEquip.peer_addr, macTransmissor, 6);
-    peerEquip.channel = 0;
-    peerEquip.encrypt = false;
-    esp_now_add_peer(&peerEquip);
-}
-
-void loop() {
-// Comando não bloqueante vindo do contato_cli: START / STOP
-    if (Serial.available() > 0) {
-        char cmd[16] = {0};
-
-        Serial.readBytesUntil('\n', cmd, sizeof(cmd) - 1);
-
-        if (strcmp(cmd, "START") == 0) {
-            serialAtivo = true;
-            enviarControle(1);
-            ultimoReenvio = millis();
-        } 
-        else if (strcmp(cmd, "STOP") == 0) {
-            serialAtivo = false;
-            enviarControle(0);
-        }
-        else if (strcmp(cmd, "ID?") == 0) {
-            Serial.print("ID/");
-            Serial.println(BASE_ID);
-        }
-    }
-    if (serialAtivo && (millis() - ultimoReenvio >= 2000)) {
-        ultimoReenvio = millis();
-        enviarControle(1);
-    }
-    if (newData) {
-        portENTER_CRITICAL(&mux);
-        memcpy(&bufferMessage, &MIDImessage, sizeof(MIDImessage));
-        newData = false;
-        portEXIT_CRITICAL(&mux);
-
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%d/%d/%d/%d",
-                 bufferMessage.id,
-                 bufferMessage.gyro,
-                 bufferMessage.accel,
-                 bufferMessage.touch);
-
-        int len = strlen(buf) + 2;
-        if (serialAtivo && Serial.availableForWrite() >= len) {
-            Serial.println(buf);
-=======
 // ═════════ Callback beacon/controle ═════════
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
     if (len == sizeof(beacon_t)) {
@@ -301,12 +183,10 @@ void loop() {
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
 
-        message.id      = ID;
-        message.gyro    = (int16_t)(ypr[2] * 180 / M_PI);
-        message.accel_x = (int32_t)aaReal.x;
-        message.accel_y = (int32_t)aaReal.y;
-        message.accel_z = (int32_t)aaReal.z;
-        message.touch   = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+        message.id    = ID;
+        message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
+        message.accel = (int32_t)aaReal.x;
+        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
 
         digitalWrite(
             LED_AZUL,
@@ -314,13 +194,9 @@ void loop() {
         );
 
         #ifdef PRINT_SENSOR
-            char buf[96];
-            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel_x:%ld accel_y:%ld accel_z:%ld touch:%d",
-                     message.id, message.gyro,
-                     (long)message.accel_x,
-                     (long)message.accel_y,
-                     (long)message.accel_z,
-                     message.touch);
+            char buf[64];
+            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
+                     message.id, message.gyro, message.accel, message.touch);
             Serial.println(buf);
         #endif
     } else {
@@ -332,7 +208,6 @@ void loop() {
         meu_slot_aberto = false;
         if (transmissaoAtiva) {
             esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
->>>>>>> ac997f0cdb5ee92caf6e6df37a8f0446e0be2f53
         }
     }
 }

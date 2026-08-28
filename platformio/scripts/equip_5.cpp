@@ -7,18 +7,18 @@
 #include "esp_log.h"
 
 // ═════════ Defines ═════════
-// #define USE_DELAY
+#define USE_DELAY
 // #define AUTO_CALLIBRATION
-// #define PRINT_MAC        // Imprime o MAC deste dispositivo no boot
-// #define PRINT_CANAL      // Imprime o canal Wi-Fi configurado no boot
-// #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
+// #define PRINT_MAC      
+// #define PRINT_CANAL     
+// #define PRINT_SENSOR      
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;
 const uint8_t ID = 5;
-const uint8_t MEU_SLOT = 2;           // slot 2 = equip 5
+const uint8_t MEU_SLOT = 2;  
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; // MAC da base_5
+uint8_t broadcastAddress[] = {0x88, 0x57, 0x21, 0xAD, 0x59, 0x40}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;

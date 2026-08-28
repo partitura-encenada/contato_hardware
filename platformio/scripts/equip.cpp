@@ -9,16 +9,15 @@
 // ═════════ Defines ═════════
 // #define USE_DELAY
 // #define AUTO_CALLIBRATION
-// #define PRINT_MAC        // Imprime o MAC deste dispositivo no boot
-// #define PRINT_CANAL      // Imprime o canal Wi-Fi configurado no boot
-// #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
+// #define PRINT_MAC       
+// #define PRINT_CANAL     
+// #define PRINT_SENSOR     
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
-const int LED_AZUL = 2;
-const uint8_t ID = 8;
-const uint8_t MEU_SLOT = 5;           // slot 5 = equip 8
+const uint8_t ID = 1;
+const uint8_t MEU_SLOT = 1;         
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0x09, 0x70}; // MAC da base_8
+uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x52, 0x36, 0x70}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
@@ -53,29 +52,14 @@ float       ypr[3];
 message_t message;
 esp_now_peer_info_t peerInfo;
 volatile bool meu_slot_aberto = false;
-volatile bool transmissaoAtiva = false;
 
-// ═════════ Struct controle da base individual ═════════
-typedef struct {
-    uint8_t ativo;
-} controle_t;
-
-// ═════════ Callback beacon/controle ═════════
+// ═════════ Callback beacon ═════════
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-    if (len == sizeof(beacon_t)) {
-        beacon_t beacon;
-        memcpy(&beacon, incomingData, sizeof(beacon_t));
-        if (beacon.slot_atual == MEU_SLOT) {
-            meu_slot_aberto = true;
-        }
-        return;
-    }
-
-    if (len == sizeof(controle_t)) {
-        controle_t controle;
-        memcpy(&controle, incomingData, sizeof(controle_t));
-        transmissaoAtiva = (controle.ativo == 1);
-        return;
+    if (len != sizeof(beacon_t)) return;
+    beacon_t beacon;
+    memcpy(&beacon, incomingData, sizeof(beacon_t));
+    if (beacon.slot_atual == MEU_SLOT) {
+        meu_slot_aberto = true;
     }
 }
 
@@ -101,7 +85,6 @@ void setup() {
     Wire.begin();
     Wire.setClock(400000);
     Serial.begin(115200);
-    pinMode(LED_AZUL, OUTPUT);
     esp_log_level_set("*", ESP_LOG_NONE);
 
     mpu.initialize();
@@ -112,9 +95,9 @@ void setup() {
 
     // Offsets antes do resetFIFO — ordem correta
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1590);
-        mpu.setXGyroOffset(166);
-        mpu.setYGyroOffset(-44);
+        mpu.setZAccelOffset(1592);
+        mpu.setXGyroOffset(161);
+        mpu.setYGyroOffset(-39);
         mpu.setZGyroOffset(49);
     #endif
 
@@ -188,11 +171,6 @@ void loop() {
         message.accel = (int32_t)aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
 
-        digitalWrite(
-            LED_AZUL,
-            transmissaoAtiva && message.touch
-        );
-
         #ifdef PRINT_SENSOR
             char buf[64];
             snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
@@ -206,8 +184,6 @@ void loop() {
     // Transmite apenas quando a base mestre abrir o slot
     if (meu_slot_aberto) {
         meu_slot_aberto = false;
-        if (transmissaoAtiva) {
-            esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
-        }
+        esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
     }
 }

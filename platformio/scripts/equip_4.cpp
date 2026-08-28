@@ -7,23 +7,22 @@
 #include "esp_log.h"
 
 // ═════════ Defines ═════════
-// #define USE_DELAY
+#define USE_DELAY
 // #define AUTO_CALLIBRATION
-// #define PRINT_MAC        // Imprime o MAC deste dispositivo no boot
-// #define PRINT_CANAL      // Imprime o canal Wi-Fi configurado no boot
-// #define PRINT_SENSOR     // Imprime os valores do sensor em tempo real
+// #define PRINT_MAC      
+// #define PRINT_CANAL     
+// #define PRINT_SENSOR     
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;
-const uint8_t ID = 3;
-const uint8_t MEU_SLOT = 0;           // slot 0 = equip 3
+const uint8_t ID = 4;
+const uint8_t MEU_SLOT = 1;  
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x2E, 0xE6, 0x88}; // MAC da base_3
+uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0xEB, 0x64}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
 
-// ═════════ Struct beacon da base mestre ═════════
 typedef struct {
     uint8_t slot_atual;
     uint32_t timestamp;
@@ -112,9 +111,9 @@ void setup() {
 
     // Offsets antes do resetFIFO — ordem correta
     #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1590);
-        mpu.setXGyroOffset(166);
-        mpu.setYGyroOffset(-44);
+        mpu.setZAccelOffset(1592);
+        mpu.setXGyroOffset(161);
+        mpu.setYGyroOffset(-39);
         mpu.setZGyroOffset(49);
     #endif
 

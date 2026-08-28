@@ -1,12 +1,12 @@
 //═════════ Bibliotecas ═════════
 #include <esp_now.h>                    
 #include <WiFi.h>                       
-#include "Wire.h"                      
 #include "esp_wifi.h"   
 
 //═════════ ALTERAR POR CONJUNTO ═════════   
-const int CANAL_ESPECIFICO = 4;     
-uint8_t macTransmissor[] = {0x14, 0x33, 0x5C, 0x52, 0x4D, 0xE0};
+const int CANAL_ESPECIFICO = 1;     
+uint8_t macTransmissor[] = {0xF8, 0xB3, 0xB7, 0x50, 0xCC, 0xEC};
+const uint8_t BASE_ID = 7;
 
 //═════════ Struct da mensagem ESP-NOW ═════════
 typedef struct {
@@ -19,7 +19,21 @@ typedef struct {
 static struct_message MIDImessage;
 static struct_message bufferMessage;
 volatile bool newData = false;
+bool serialAtivo = false; // só imprime depois que contato_cli mandar START
+uint32_t ultimoReenvio = 0;
+
+typedef struct {
+    uint8_t ativo;
+} controle_t;
+
+esp_now_peer_info_t peerEquip;
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; // mutex contra race condition
+
+void enviarControle(uint8_t ativo) {
+    controle_t ctrl;
+    ctrl.ativo = ativo;
+    esp_now_send(macTransmissor, (uint8_t *)&ctrl, sizeof(ctrl));
+}
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
     if (memcmp(mac_addr, macTransmissor, 6) != 0) return;
@@ -33,6 +47,8 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
 
 void setup() {
     Serial.begin(115200);
+    Serial.setTimeout(1);
+
     esp_log_level_set("*", ESP_LOG_NONE);
 
     WiFi.mode(WIFI_STA);
@@ -48,9 +64,39 @@ void setup() {
         return;
     }
     esp_now_register_recv_cb(OnDataRecv);
+
+    memset(&peerEquip, 0, sizeof(peerEquip));
+    memcpy(peerEquip.peer_addr, macTransmissor, 6);
+    peerEquip.channel = 0;
+    peerEquip.encrypt = false;
+    esp_now_add_peer(&peerEquip);
 }
 
 void loop() {
+// Comando não bloqueante vindo do contato_cli: START / STOP
+    if (Serial.available() > 0) {
+        char cmd[16] = {0};
+
+        Serial.readBytesUntil('\n', cmd, sizeof(cmd) - 1);
+
+        if (strcmp(cmd, "START") == 0) {
+            serialAtivo = true;
+            enviarControle(1);
+            ultimoReenvio = millis();
+        } 
+        else if (strcmp(cmd, "STOP") == 0) {
+            serialAtivo = false;
+            enviarControle(0);
+        }
+        else if (strcmp(cmd, "ID?") == 0) {
+            Serial.print("ID/");
+            Serial.println(BASE_ID);
+        }
+    }
+    if (serialAtivo && (millis() - ultimoReenvio >= 2000)) {
+        ultimoReenvio = millis();
+        enviarControle(1);
+    }
     if (newData) {
         portENTER_CRITICAL(&mux);
         memcpy(&bufferMessage, &MIDImessage, sizeof(MIDImessage));
@@ -63,6 +109,10 @@ void loop() {
                  bufferMessage.gyro,
                  bufferMessage.accel,
                  bufferMessage.touch);
-        Serial.println(buf);
+
+        int len = strlen(buf) + 2;
+        if (serialAtivo && Serial.availableForWrite() >= len) {
+            Serial.println(buf);
+        }
     }
 }

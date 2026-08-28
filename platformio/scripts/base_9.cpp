@@ -1,18 +1,20 @@
 //═════════ Bibliotecas ═════════
 #include <esp_now.h>                    
 #include <WiFi.h>                       
-#include "esp_wifi.h"   
+#include "esp_wifi.h"      
 
 //═════════ ALTERAR POR CONJUNTO ═════════   
 const int CANAL_ESPECIFICO = 1;     
-uint8_t macTransmissor[] = {0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4};
-const uint8_t BASE_ID = 1;
+uint8_t macTransmissor[] = {0xF8, 0xB3, 0xB7, 0x50, 0xCC, 0xEC}; 
+const uint8_t BASE_ID = 9;
 
 //═════════ Struct da mensagem ESP-NOW ═════════
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
-    int32_t  accel;
+    int32_t  accel_x;
+    int32_t  accel_y;
+    int32_t  accel_z;
     uint8_t  touch;
 } struct_message;
 
@@ -103,11 +105,13 @@ void loop() {
         newData = false;
         portEXIT_CRITICAL(&mux);
 
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%d/%d/%d/%d",
+        char buf[96];
+        snprintf(buf, sizeof(buf), "%d/%d/%ld/%ld/%ld/%d",
                  bufferMessage.id,
                  bufferMessage.gyro,
-                 bufferMessage.accel,
+                 (long)bufferMessage.accel_x,
+                 (long)bufferMessage.accel_y,
+                 (long)bufferMessage.accel_z,
                  bufferMessage.touch);
 
         int len = strlen(buf) + 2;

@@ -15,10 +15,10 @@
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;
-const uint8_t ID = 8;
+const uint8_t ID = 9;
 const uint8_t MEU_SLOT = 5;     
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0x6E, 0xE4};
+uint8_t broadcastAddress[] = {0xCC, 0xDB, 0xA7, 0x91, 0x6D, 0x9C};
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
@@ -33,7 +33,9 @@ typedef struct {
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
-    int32_t  accel;
+    int32_t  accel_x;
+    int32_t  accel_y;
+    int32_t  accel_z;
     uint8_t  touch;
 } message_t;
 
@@ -183,10 +185,12 @@ void loop() {
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
 
-        message.id    = ID;
-        message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
-        message.accel = (int32_t)aaReal.x;
-        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+        message.id      = ID;
+        message.gyro    = (int16_t)(ypr[2] * 180 / M_PI);
+        message.accel_x = (int32_t)aaReal.x;
+        message.accel_y = (int32_t)aaReal.y;
+        message.accel_z = (int32_t)aaReal.z;
+        message.touch   = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
 
         digitalWrite(
             LED_AZUL,
@@ -194,9 +198,13 @@ void loop() {
         );
 
         #ifdef PRINT_SENSOR
-            char buf[64];
-            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
-                     message.id, message.gyro, message.accel, message.touch);
+            char buf[96];
+            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel_x:%ld accel_y:%ld accel_z:%ld touch:%d",
+                     message.id, message.gyro,
+                     (long)message.accel_x,
+                     (long)message.accel_y,
+                     (long)message.accel_z,
+                     message.touch);
             Serial.println(buf);
         #endif
     } else {

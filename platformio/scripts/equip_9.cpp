@@ -7,18 +7,18 @@
 #include "esp_log.h"
 
 // ═════════ Defines ═════════
-// #define USE_DELAY
+#define USE_DELAY
 // #define AUTO_CALLIBRATION
-// #define PRINT_MAC       
-// #define PRINT_CANAL    
+// #define PRINT_MAC      
+// #define PRINT_CANAL     
 // #define PRINT_SENSOR    
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;
-const uint8_t ID = 5;
-const uint8_t MEU_SLOT = 2;  
+const uint8_t ID = 8;
+const uint8_t MEU_SLOT = 5;     
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x88, 0x57, 0x21, 0xAD, 0x59, 0x40}; 
+uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0x6E, 0xE4};
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;

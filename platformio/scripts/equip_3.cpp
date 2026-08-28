@@ -7,11 +7,11 @@
 #include "esp_log.h"
 
 // ═════════ Defines ═════════
-// #define USE_DELAY
+#define USE_DELAY
 // #define AUTO_CALLIBRATION
-// #define PRINT_MAC       
-// #define PRINT_CANAL    
-// #define PRINT_SENSOR    
+// #define PRINT_MAC      
+// #define PRINT_CANAL     
+// #define PRINT_SENSOR      
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;

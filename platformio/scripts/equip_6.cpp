@@ -15,10 +15,10 @@
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;
-const uint8_t ID = 8;
-const uint8_t MEU_SLOT = 5;     
+const uint8_t ID = 6;
+const uint8_t MEU_SLOT = 3;        
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0x6E, 0xE4};
+uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x52, 0x36, 0x70};
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;

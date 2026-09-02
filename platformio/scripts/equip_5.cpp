@@ -8,7 +8,6 @@
 
 // ═════════ Defines ═════════
 #define USE_DELAY
-// #define AUTO_CALLIBRATION
 // #define PRINT_MAC      
 // #define PRINT_CANAL     
 // #define PRINT_SENSOR      
@@ -21,7 +20,6 @@ const int CANAL = 1;
 uint8_t broadcastAddress[] = {0x88, 0x57, 0x21, 0xAD, 0x59, 0x40}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
-const int callibration_time = 6;
 
 // ═════════ Struct beacon da base mestre ═════════
 typedef struct {
@@ -111,19 +109,14 @@ void setup() {
     mpu.setDMPEnabled(true);
 
     // Offsets antes do resetFIFO — ordem correta
-    #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1590);
-        mpu.setXGyroOffset(166);
-        mpu.setYGyroOffset(-44);
-        mpu.setZGyroOffset(49);
-    #endif
+    mpu.setXAccelOffset(1420);
+    mpu.setYAccelOffset(-2999);
+    mpu.setZAccelOffset(3384);
+    mpu.setXGyroOffset(-157);
+    mpu.setYGyroOffset(-39);
+    mpu.setZGyroOffset(75);
 
     if (dev_status == 0) {
-        #ifdef AUTO_CALLIBRATION
-            mpu.CalibrateAccel(callibration_time);
-            mpu.CalibrateGyro(callibration_time);
-            mpu.PrintActiveOffsets();
-        #endif
         dmp_ready = true;
         packet_size = mpu.dmpGetFIFOPacketSize();
     } else {

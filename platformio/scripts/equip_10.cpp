@@ -8,16 +8,16 @@
 
 // ═════════ Defines ═════════
 #define USE_DELAY
-// #define PRINT_MAC      
-// #define PRINT_CANAL     
-// #define PRINT_SENSOR      
+// #define PRINT_MAC
+// #define PRINT_CANAL
+// #define PRINT_SENSOR
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;
-const uint8_t ID = 3;
-const uint8_t MEU_SLOT = 0;     
+const uint8_t ID = 10;
+const uint8_t MEU_SLOT = 6;        // ALTERAR: confira slots ja usados em relogio.cpp (NUM_EQUIPS pode precisar subir)
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x84, 0x1F, 0xE8, 0x1A, 0x83, 0x1C}; 
+uint8_t broadcastAddress[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // ALTERAR: MAC da base 10
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 
@@ -27,11 +27,15 @@ typedef struct {
     uint32_t timestamp;
 } beacon_t;
 
-// ═════════ Struct mensagem para base individual ═════════
+// ═════════ Struct mensagem para base individual (gyro 3 eixos + accel 3 eixos) ═════════
 typedef struct {
     uint8_t  id;
-    int16_t  gyro;
-    int32_t  accel;
+    int16_t  gyro_yaw;
+    int16_t  gyro_pitch;
+    int16_t  gyro_roll;
+    int32_t  accel_x;
+    int32_t  accel_y;
+    int32_t  accel_z;
     uint8_t  touch;
 } message_t;
 
@@ -108,12 +112,12 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    mpu.setXAccelOffset(1420);
-    mpu.setYAccelOffset(-2999);
-    mpu.setZAccelOffset(3384);
-    mpu.setXGyroOffset(-157);
-    mpu.setYGyroOffset(-39);
-    mpu.setZGyroOffset(75);
+    mpu.setXAccelOffset(0);
+    mpu.setYAccelOffset(0);
+    mpu.setZAccelOffset(0);
+    mpu.setXGyroOffset(0);
+    mpu.setYGyroOffset(0);
+    mpu.setZGyroOffset(0);
 
     if (dev_status == 0) {
         dmp_ready = true;
@@ -175,10 +179,14 @@ void loop() {
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
 
-        message.id    = ID;
-        message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
-        message.accel = (int32_t)aaReal.x;
-        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+        message.id         = ID;
+        message.gyro_yaw   = (int16_t)(ypr[0] * 180 / M_PI);
+        message.gyro_pitch = (int16_t)(ypr[1] * 180 / M_PI);
+        message.gyro_roll  = (int16_t)(ypr[2] * 180 / M_PI); // equivalente ao "gyro" unico dos outros equips
+        message.accel_x    = (int32_t)aaReal.x;
+        message.accel_y    = (int32_t)aaReal.y;
+        message.accel_z    = (int32_t)aaReal.z;
+        message.touch       = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
 
         digitalWrite(
             LED_AZUL,
@@ -186,9 +194,11 @@ void loop() {
         );
 
         #ifdef PRINT_SENSOR
-            char buf[64];
-            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
-                     message.id, message.gyro, message.accel, message.touch);
+            char buf[128];
+            snprintf(buf, sizeof(buf), "id:%d yaw:%d pitch:%d roll:%d ax:%ld ay:%ld az:%ld touch:%d",
+                     message.id, message.gyro_yaw, message.gyro_pitch, message.gyro_roll,
+                     (long)message.accel_x, (long)message.accel_y, (long)message.accel_z,
+                     message.touch);
             Serial.println(buf);
         #endif
     } else {

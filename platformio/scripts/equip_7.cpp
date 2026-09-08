@@ -108,7 +108,6 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    // Offsets antes do resetFIFO — ordem correta
     #ifndef AUTO_CALLIBRATION
         mpu.setZAccelOffset(1590);
         mpu.setXGyroOffset(166);

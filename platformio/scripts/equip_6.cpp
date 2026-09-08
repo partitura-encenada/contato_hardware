@@ -108,7 +108,7 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    // Offsets antes do resetFIFO — ordem correta
+
     mpu.setXAccelOffset(1420);
     mpu.setYAccelOffset(-2999);
     mpu.setZAccelOffset(3384);

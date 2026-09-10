@@ -1,33 +1,29 @@
-// ═════════ Bibliotecas ═════════
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <esp_now.h>
 #include <WiFi.h>
 #include "Wire.h"
 #include "esp_wifi.h"
 #include "esp_log.h"
+#include "ota_receptor.h"
 
-// ═════════ Defines ═════════
 #define USE_DELAY
 // #define PRINT_MAC
 // #define PRINT_CANAL
 // #define PRINT_SENSOR
 
-// ═════════ ALTERAR POR CONJUNTO ═════════
 const int LED_AZUL = 2;
 const uint8_t ID = 10;
-const uint8_t MEU_SLOT = 6;        // ALTERAR: confira slots ja usados em relogio.cpp (NUM_EQUIPS pode precisar subir)
+const uint8_t MEU_SLOT = 6;
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // ALTERAR: MAC da base 10
+uint8_t broadcastAddress[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 
-// ═════════ Struct beacon da base mestre ═════════
 typedef struct {
     uint8_t slot_atual;
     uint32_t timestamp;
 } beacon_t;
 
-// ═════════ Struct mensagem para base individual (gyro 3 eixos + accel 3 eixos) ═════════
 typedef struct {
     uint8_t  id;
     int16_t  gyro_yaw;
@@ -39,7 +35,6 @@ typedef struct {
     uint8_t  touch;
 } message_t;
 
-// ═════════ Variáveis MPU6050 ═════════
 MPU6050 mpu;
 uint8_t     dev_status;
 uint16_t    packet_size;
@@ -57,13 +52,13 @@ esp_now_peer_info_t peerInfo;
 volatile bool meu_slot_aberto = false;
 volatile bool transmissaoAtiva = false;
 
-// ═════════ Struct controle da base individual ═════════
 typedef struct {
     uint8_t ativo;
 } controle_t;
 
-// ═════════ Callback beacon/controle ═════════
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
+    if (otaProcessarPacote(mac_addr, incomingData, len)) return;
+
     if (len == sizeof(beacon_t)) {
         beacon_t beacon;
         memcpy(&beacon, incomingData, sizeof(beacon_t));
@@ -81,7 +76,6 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
     }
 }
 
-// ═════════ setChannel ═════════
 esp_err_t setChannel(int channel) {
     esp_wifi_set_promiscuous(true);
     esp_err_t result = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
@@ -97,7 +91,6 @@ esp_err_t setChannel(int channel) {
     return result;
 }
 
-// ═════════ setup ═════════
 void setup() {
     setCpuFrequencyMhz(80);
     Wire.begin();
@@ -127,7 +120,6 @@ void setup() {
         Serial.print(dev_status);
     }
 
-    // Limpa FIFO acumulado após calibração
     delay(100);
     mpu.resetFIFO();
 
@@ -154,10 +146,8 @@ void setup() {
         return;
     }
 
-    // Recebe beacon da base mestre
     esp_now_register_recv_cb(OnDataRecv);
 
-    // Peer da base individual
     peerInfo = {};
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
     peerInfo.channel = 0;
@@ -168,7 +158,6 @@ void setup() {
     }
 }
 
-// ═════════ loop ═════════
 void loop() {
     if (!dmp_ready) return;
 
@@ -182,7 +171,7 @@ void loop() {
         message.id         = ID;
         message.gyro_yaw   = (int16_t)(ypr[0] * 180 / M_PI);
         message.gyro_pitch = (int16_t)(ypr[1] * 180 / M_PI);
-        message.gyro_roll  = (int16_t)(ypr[2] * 180 / M_PI); // equivalente ao "gyro" unico dos outros equips
+        message.gyro_roll  = (int16_t)(ypr[2] * 180 / M_PI);
         message.accel_x    = (int32_t)aaReal.x;
         message.accel_y    = (int32_t)aaReal.y;
         message.accel_z    = (int32_t)aaReal.z;
@@ -205,7 +194,6 @@ void loop() {
         delay(1);
     }
 
-    // Transmite apenas quando a base mestre abrir o slot
     if (meu_slot_aberto) {
         meu_slot_aberto = false;
         if (transmissaoAtiva) {

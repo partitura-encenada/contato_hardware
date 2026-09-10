@@ -6,6 +6,7 @@
 #include <WiFi.h>
 #include "esp_wifi.h"
 #include "esp_log.h"
+#include "ota_receptor.h"
 
 const int      CANAL      = 1;
 const int      NUM_EQUIPS = 2;
@@ -20,6 +21,15 @@ typedef struct {
 beacon_t beacon;
 
 esp_now_peer_info_t peerInfo;
+
+// ═════════ Callback de recepcao - so existe pra atender OTA ═════════
+// O TDMA normalmente nunca recebe nada (so envia beacon), mas precisa
+// desse callback registrado pra aceitar atualizacao de firmware via
+// ota_receptor.h. Qualquer pacote que nao seja OTA e simplesmente
+// ignorado por otaProcessarPacote (retorna false e nao faz nada).
+void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
+    otaProcessarPacote(mac_addr, incomingData, len);
+}
 
 esp_err_t setChannel(int channel) {
     esp_wifi_set_promiscuous(true);
@@ -41,6 +51,8 @@ void setup() {
         Serial.println("Erro ao inicializar ESP-NOW");
         return;
     }
+
+    esp_now_register_recv_cb(OnDataRecv);
 
     memset(&peerInfo, 0, sizeof(peerInfo));
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);

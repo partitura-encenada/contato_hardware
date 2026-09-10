@@ -1,13 +1,11 @@
-//═════════ Bibliotecas ═════════
 #include <esp_now.h>                    
 #include <WiFi.h>                       
 #include "esp_wifi.h"   
 
-//═════════ ALTERAR POR CONJUNTO ═════════   
 const int CANAL_ESPECIFICO = 1;     
 uint8_t macTransmissores[][6] = {
-    {0xF8, 0xB3, 0xB7, 0x50, 0xCC, 0xEC}, // equip_7 original
-    {0x3C, 0x8A, 0x1F, 0x80, 0x76, 0xA4}, // candidato alternativo 1 (ex-base_8accel/7_teste)
+    {0xF8, 0xB3, 0xB7, 0x50, 0xCC, 0xEC},
+    {0x3C, 0x8A, 0x1F, 0x80, 0x76, 0xA4},
 };
 
 const int NUM_MACS = sizeof(macTransmissores) / sizeof(macTransmissores[0]);
@@ -16,7 +14,6 @@ uint8_t macAtivo[6];
 bool temMacAtivo = false;
 const uint8_t BASE_ID = 7;
 
-//═════════ Struct da mensagem ESP-NOW ═════════
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
@@ -27,7 +24,7 @@ typedef struct {
 static struct_message MIDImessage;
 static struct_message bufferMessage;
 volatile bool newData = false;
-bool serialAtivo = false; // só imprime depois que contato_cli mandar START
+bool serialAtivo = false;
 uint32_t ultimoReenvio = 0;
 
 typedef struct {
@@ -35,7 +32,7 @@ typedef struct {
 } controle_t;
 
 esp_now_peer_info_t peerEquip;
-portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; // mutex contra race condition
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
 bool macEstaNaLista(const uint8_t *mac) {
     for (int i = 0; i < NUM_MACS; i++) {
@@ -65,16 +62,13 @@ void enviarControleParaTodos(uint8_t ativo) {
 }
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-    if (len != sizeof(struct_message)) return; // descarta pacote com tamanho errado
+    if (len != sizeof(struct_message)) return;
 
     if (!temMacAtivo) {
-        // Ainda nao travou em ninguem: so aceita se for um dos candidatos.
         if (!macEstaNaLista(mac_addr)) return;
         memcpy(macAtivo, mac_addr, 6);
         temMacAtivo = true;
     } else {
-        // Ja travou: ignora qualquer MAC que nao seja o ativo, mesmo que
-        // esteja na lista de candidatos - nunca mistura dois equips.
         if (memcmp(mac_addr, macAtivo, 6) != 0) return;
     }
 
@@ -95,7 +89,6 @@ void setup() {
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_channel(CANAL_ESPECIFICO, WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(false);
-    // Preâmbulo longo: deve ser igual ao do equip
     esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
 
     if (esp_now_init() != ESP_OK) {
@@ -114,7 +107,6 @@ void setup() {
 }
 
 void loop() {
-// Comando não bloqueante vindo do contato_cli: START / STOP
     if (Serial.available() > 0) {
         char cmd[16] = {0};
 

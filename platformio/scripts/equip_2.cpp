@@ -1,12 +1,11 @@
-// ═════════ Bibliotecas ═════════
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <esp_now.h>
 #include <WiFi.h>
 #include "Wire.h"
 #include "esp_wifi.h"
 #include "esp_log.h"
+#include "ota_receptor.h"
 
-// ═════════ Defines ═════════
 #define USE_DELAY
 // #define AUTO_CALLIBRATION
 // #define PRINT_MAC      
@@ -21,13 +20,11 @@ const int delay_time = 10;
 const int touch_sensitivity = 20;
 const int callibration_time = 6;
 
-// ═════════ Struct beacon da base mestre ═════════
 typedef struct {
     uint8_t slot_atual;
     uint32_t timestamp;
 } beacon_t;
 
-// ═════════ Struct mensagem para base individual ═════════
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
@@ -35,7 +32,6 @@ typedef struct {
     uint8_t  touch;
 } message_t;
 
-// ═════════ Variáveis MPU6050 ═════════
 MPU6050 mpu;
 uint8_t     dev_status;
 uint16_t    packet_size;
@@ -52,8 +48,9 @@ message_t message;
 esp_now_peer_info_t peerInfo;
 volatile bool meu_slot_aberto = false;
 
-// ═════════ Callback beacon ═════════
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
+    if (otaProcessarPacote(mac_addr, incomingData, len)) return;
+
     if (len != sizeof(beacon_t)) return;
     beacon_t beacon;
     memcpy(&beacon, incomingData, sizeof(beacon_t));
@@ -62,7 +59,6 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
     }
 }
 
-// ═════════ setChannel ═════════
 esp_err_t setChannel(int channel) {
     esp_wifi_set_promiscuous(true);
     esp_err_t result = esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
@@ -78,7 +74,6 @@ esp_err_t setChannel(int channel) {
     return result;
 }
 
-// ═════════ setup ═════════
 void setup() {
     setCpuFrequencyMhz(80);
     Wire.begin();
@@ -92,7 +87,6 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    // Offsets antes do resetFIFO — ordem correta
     #ifndef AUTO_CALLIBRATION
         mpu.setZAccelOffset(1592);
         mpu.setXGyroOffset(161);
@@ -113,7 +107,6 @@ void setup() {
         Serial.print(dev_status);
     }
 
-    // Limpa FIFO acumulado após calibração
     delay(100);
     mpu.resetFIFO();
 
@@ -140,10 +133,8 @@ void setup() {
         return;
     }
 
-    // Recebe beacon da base mestre
     esp_now_register_recv_cb(OnDataRecv);
 
-    // Peer da base individual
     peerInfo = {};
     memcpy(peerInfo.peer_addr, broadcastAddress, 6);
     peerInfo.channel = 0;
@@ -154,7 +145,6 @@ void setup() {
     }
 }
 
-// ═════════ loop ═════════
 void loop() {
     if (!dmp_ready) return;
 
@@ -180,7 +170,6 @@ void loop() {
         delay(1);
     }
 
-    // Transmite apenas quando a base mestre abrir o slot
     if (meu_slot_aberto) {
         meu_slot_aberto = false;
         esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));

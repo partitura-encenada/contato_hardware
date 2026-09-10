@@ -8,19 +8,18 @@
 
 // ═════════ Defines ═════════
 #define USE_DELAY
-// #define AUTO_CALLIBRATION
 // #define PRINT_MAC      
 // #define PRINT_CANAL     
 // #define PRINT_SENSOR     
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
+const int LED_AZUL = 2;
 const uint8_t ID = 7;
 const uint8_t MEU_SLOT = 4;     
 const int CANAL = 1;
 uint8_t broadcastAddress[] = {0xCC, 0xDB, 0xA7, 0x91, 0x6D, 0x9C};
 const int delay_time = 10;
 const int touch_sensitivity = 20;
-const int callibration_time = 6;
 
 // ═════════ Struct beacon da base mestre ═════════
 typedef struct {
@@ -100,6 +99,7 @@ void setup() {
     Wire.begin();
     Wire.setClock(400000);
     Serial.begin(115200);
+    pinMode(LED_AZUL, OUTPUT);
     esp_log_level_set("*", ESP_LOG_NONE);
 
     mpu.initialize();
@@ -107,20 +107,15 @@ void setup() {
 
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
-
-    #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1590);
-        mpu.setXGyroOffset(166);
-        mpu.setYGyroOffset(-44);
-        mpu.setZGyroOffset(49);
-    #endif
+    
+        mpu.setXAccelOffset(-48);
+        mpu.setYAccelOffset(-1495);
+        mpu.setZAccelOffset(3260);
+        mpu.setXGyroOffset(99);
+        mpu.setYGyroOffset(39);
+        mpu.setZGyroOffset(-64);
 
     if (dev_status == 0) {
-        #ifdef AUTO_CALLIBRATION
-            mpu.CalibrateAccel(callibration_time);
-            mpu.CalibrateGyro(callibration_time);
-            mpu.PrintActiveOffsets();
-        #endif
         dmp_ready = true;
         packet_size = mpu.dmpGetFIFOPacketSize();
     } else {
@@ -184,6 +179,11 @@ void loop() {
         message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
         message.accel = (int32_t)aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+
+        digitalWrite(
+            LED_AZUL,
+            transmissaoAtiva && message.touch
+        );
 
         #ifdef PRINT_SENSOR
             char buf[64];

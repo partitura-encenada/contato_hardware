@@ -1,13 +1,13 @@
 //═════════ Bibliotecas ═════════
 #include <esp_now.h>                    
 #include <WiFi.h>                       
-#include "esp_wifi.h"    
+#include "esp_wifi.h"   
 
 //═════════ ALTERAR POR CONJUNTO ═════════   
 const int CANAL_ESPECIFICO = 1;     
 uint8_t macTransmissores[][6] = {
-    {0x3C, 0x8A, 0x1F, 0x80, 0x76, 0xA4}, // opção 1
-    {0xA0, 0xDD, 0x6C, 0x0F, 0xBB, 0x3C}  // opção 2
+    {0xF8, 0xB3, 0xB7, 0x50, 0xCC, 0xEC}, // equip_7 original
+    {0x3C, 0x8A, 0x1F, 0x80, 0x76, 0xA4}, // candidato alternativo 1 (ex-base_8accel/7_teste)
 };
 
 const int NUM_MACS = sizeof(macTransmissores) / sizeof(macTransmissores[0]);
@@ -65,12 +65,17 @@ void enviarControleParaTodos(uint8_t ativo) {
 }
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
-    if (!macEstaNaLista(mac_addr)) return;
     if (len != sizeof(struct_message)) return; // descarta pacote com tamanho errado
 
     if (!temMacAtivo) {
+        // Ainda nao travou em ninguem: so aceita se for um dos candidatos.
+        if (!macEstaNaLista(mac_addr)) return;
         memcpy(macAtivo, mac_addr, 6);
         temMacAtivo = true;
+    } else {
+        // Ja travou: ignora qualquer MAC que nao seja o ativo, mesmo que
+        // esteja na lista de candidatos - nunca mistura dois equips.
+        if (memcmp(mac_addr, macAtivo, 6) != 0) return;
     }
 
     portENTER_CRITICAL_ISR(&mux);

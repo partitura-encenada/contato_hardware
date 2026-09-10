@@ -17,7 +17,7 @@ const int LED_AZUL = 2;
 const uint8_t ID = 8;
 const uint8_t MEU_SLOT = 5;     
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x1C, 0x69, 0x20, 0xA3, 0x6E, 0xE4};
+uint8_t broadcastAddress[] = {0xCC, 0xDB, 0xA7, 0x91, 0x6D, 0x9C};
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 
@@ -108,12 +108,13 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    mpu.setXAccelOffset(1420);
-    mpu.setYAccelOffset(-2999);
-    mpu.setZAccelOffset(3384);
-    mpu.setXGyroOffset(-157);
-    mpu.setYGyroOffset(-39);
-    mpu.setZGyroOffset(75);
+        mpu.setXAccelOffset(-48);
+        mpu.setYAccelOffset(-1495);
+        mpu.setZAccelOffset(3260);
+        mpu.setXGyroOffset(99);
+        mpu.setYGyroOffset(39);
+        mpu.setZGyroOffset(-64);
+
 
     if (dev_status == 0) {
         dmp_ready = true;

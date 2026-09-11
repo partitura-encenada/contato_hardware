@@ -12,10 +12,10 @@
 // #define PRINT_SENSOR      
 
 const int LED_AZUL = 2;
-const uint8_t ID = 3;
-const uint8_t MEU_SLOT = 0;     
+const uint8_t ID = 5;
+const uint8_t MEU_SLOT = 2;  
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x84, 0x1F, 0xE8, 0x1A, 0x83, 0x1C}; 
+uint8_t broadcastAddress[] = {0x88, 0x57, 0x21, 0xAD, 0x59, 0x40}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
 
@@ -155,6 +155,8 @@ void setup() {
 }
 
 void loop() {
+    otaProcessarPendencias();
+
     if (!dmp_ready) return;
 
     if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) {

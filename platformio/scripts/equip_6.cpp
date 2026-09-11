@@ -156,6 +156,8 @@ void setup() {
 }
 
 void loop() {
+    otaProcessarPendencias();
+
     if (!dmp_ready) return;
 
     if (mpu.dmpGetCurrentFIFOPacket(fifo_buffer)) {

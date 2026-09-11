@@ -1,18 +1,11 @@
 #include <WiFi.h>
 #include "esp_wifi.h"
 
-// Se true: mostra so os equips conhecidos, esconde "outras fontes",
-// desliga o scan de redes Wi-Fi e para de variar de canal (fica so no
-// canal de producao) - use quando so importa a saude do seu sistema,
-// nao o ambiente ao redor.
+
+
 const bool MODO_FILTRO_EQUIPS = true;
-const int CANAL_PRODUCAO = 1; // ALTERAR se seu canal de producao mudar
-
-// Canais varridos em sequencia quando MODO_FILTRO_EQUIPS = false: seu
-// canal de producao + os que se sobrepoem com ele no espectro 2.4GHz.
-// Canal 1 sobrepoe com 2,3,4,5 (so 1/6/11 sao mutuamente independentes).
+const int CANAL_PRODUCAO = 1;
 const int CANAIS_SOBREPOSTOS[] = {1, 2, 3, 4, 5};
-
 const int* CANAIS_MONITORADOS = MODO_FILTRO_EQUIPS ? &CANAL_PRODUCAO : CANAIS_SOBREPOSTOS;
 const int NUM_CANAIS = MODO_FILTRO_EQUIPS
     ? 1
@@ -205,8 +198,7 @@ void imprimirRelatorio(const RelatorioJanela &r) {
 }
 
 void escanearRedes() {
-    // Scan usa o mesmo radio do sniffer - pausa a captura de pacotes
-    // por alguns segundos enquanto varre todos os canais.
+
     esp_wifi_set_promiscuous(false);
 
     int n = WiFi.scanNetworks();
@@ -227,7 +219,6 @@ void escanearRedes() {
 
     WiFi.scanDelete();
 
-    // Volta pro canal em que estava e retoma a captura de pacotes.
     esp_wifi_set_channel(CANAIS_MONITORADOS[indiceCanalAtual], WIFI_SECOND_CHAN_NONE);
     esp_wifi_set_promiscuous(true);
 }
@@ -259,7 +250,7 @@ void setup() {
 void loop() {
     static uint32_t ultimo = 0;
     static uint32_t ultimoScan = 0;
-    const uint32_t INTERVALO_SCAN_MS = 30000; // varre as redes visiveis a cada 30s
+    const uint32_t INTERVALO_SCAN_MS = 60000;
 
     if (!MODO_FILTRO_EQUIPS && millis() - ultimoScan >= INTERVALO_SCAN_MS) {
         ultimoScan = millis();

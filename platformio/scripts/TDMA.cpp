@@ -1,7 +1,3 @@
-// ═════════ BASE MESTRE TDMA ═════════
-// Envia beacon de sincronização para todos os equips
-// Canal 8, ciclo de 6 slots × 1400µs = 8.4ms
-
 #include <esp_now.h>
 #include <WiFi.h>
 #include "esp_wifi.h"
@@ -10,7 +6,7 @@
 
 const int      CANAL      = 1;
 const int      NUM_EQUIPS = 2;
-const uint32_t SLOT_US    = 1500; // ← altere aqui para testar diferentes slots
+const uint32_t SLOT_US    = 1500; 
 
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -22,11 +18,7 @@ beacon_t beacon;
 
 esp_now_peer_info_t peerInfo;
 
-// ═════════ Callback de recepcao - so existe pra atender OTA ═════════
-// O TDMA normalmente nunca recebe nada (so envia beacon), mas precisa
-// desse callback registrado pra aceitar atualizacao de firmware via
-// ota_receptor.h. Qualquer pacote que nao seja OTA e simplesmente
-// ignorado por otaProcessarPacote (retorna false e nao faz nada).
+
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
     otaProcessarPacote(mac_addr, incomingData, len);
 }
@@ -71,6 +63,8 @@ void setup() {
 }
 
 void loop() {
+    otaProcessarPendencias();
+
     for (int slot = 0; slot < NUM_EQUIPS; slot++) {
         beacon.slot_atual = slot;
         beacon.timestamp  = micros();

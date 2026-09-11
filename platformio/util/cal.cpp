@@ -117,5 +117,7 @@ void setup() {
 }
 
 void loop() {
+    otaProcessarPendencias();
+
     // Nada aqui - so espera o proximo OTA (firmware normal do equip).
 }

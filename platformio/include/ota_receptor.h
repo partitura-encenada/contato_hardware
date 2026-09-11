@@ -17,9 +17,9 @@
 #include <string.h>
 
 #define OTA_TIPO_INICIO 0xAA
-#define OTA_TIPO_DADO    0xBB
-#define OTA_TIPO_FIM     0xCC
-#define OTA_MAX_DADOS    200
+#define OTA_TIPO_DADO   0xBB
+#define OTA_TIPO_FIM    0xCC
+#define OTA_MAX_DADOS   200
 
 // Deve ser EXATAMENTE igual ao ota_pacote_t da ponte.cpp - e o formato
 // do pacote que ela envia.

@@ -24,9 +24,9 @@ const int CANAL = 1; // TEM que ser o mesmo canal usado por bases/equips/relogio
 
 // ═════════ Struct do pacote OTA (fragmento por ESP-NOW) ═════════
 #define OTA_TIPO_INICIO 0xAA
-#define OTA_TIPO_DADO    0xBB
-#define OTA_TIPO_FIM     0xCC
-#define OTA_MAX_DADOS    200
+#define OTA_TIPO_DADO   0xBB
+#define OTA_TIPO_FIM    0xCC
+#define OTA_MAX_DADOS   200
 
 typedef struct {
     uint8_t  tipo;

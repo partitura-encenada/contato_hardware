@@ -20,7 +20,7 @@
 
 // ═════════ ALTERAR POR CONJUNTO ═════════
 const int CANAL = 1; // TEM que ser o mesmo canal do resto do sistema
-uint8_t PONTE_MAC[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // ALTERAR: MAC do ESP32 ponte
+uint8_t PONTE_MAC[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; // MAC do ESP32 ponte
 
 MPU6050 mpu;
 const int callibration_time = 6;

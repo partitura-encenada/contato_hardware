@@ -1,6 +1,7 @@
 #include <esp_now.h>                    
 #include <WiFi.h>                       
 #include "esp_wifi.h"      
+#include "ota_receptor.h"
 
 const int CANAL_ESPECIFICO = 1;     
 uint8_t macTransmissor[] = {0x3C, 0x8A, 0x1F, 0x80, 0x76, 0xA4}; 

@@ -5,7 +5,7 @@
 #include "ota_receptor.h"
 
 const int      CANAL      = 1;
-const int      NUM_EQUIPS = 2;
+const int      NUM_EQUIPS = 6;
 const uint32_t SLOT_US    = 1500; 
 
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};

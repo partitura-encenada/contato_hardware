@@ -23,6 +23,7 @@ typedef struct {
 } ota_status_t;
 
 static bool     otaEmAndamento     = false;
+static bool     otaTeveErro        = false; // trava a 1a mensagem de erro real, ignora repeticoes
 static uint32_t otaBytesRecebidos  = 0;
 static uint32_t otaTamanhoTotal    = 0;
 static uint32_t otaIndiceEsperado  = 0;
@@ -34,9 +35,19 @@ static uint8_t         otaFilaMac[OTA_FILA_TAMANHO][6];
 static volatile int    otaFilaEntrada = 0;
 static volatile int    otaFilaSaida   = 0;
 static volatile int    otaFilaCount   = 0;
+static volatile uint32_t otaFilaDescartados = 0; // pacotes perdidos por fila cheia (deveria ser raro)
 static portMUX_TYPE    otaMux = portMUX_INITIALIZER_UNLOCKED;
 
 inline void otaEnviarStatus(uint8_t status, const char *mensagem) {
+    // So deixa passar a PRIMEIRA mensagem de erro de uma sessao - sem
+    // isso, um erro real vira "esperava INICIO" repetido em todo
+    // pacote seguinte (sao milhares ate o FIM), e a ponte so guarda o
+    // ultimo que chega - a causa real se perde debaixo da repeticao.
+    if (status != 0) {
+        if (otaTeveErro) return;
+        otaTeveErro = true;
+    }
+
     ota_status_t resposta;
     resposta.status = status;
     resposta.bytes_recebidos = otaBytesRecebidos;
@@ -57,7 +68,12 @@ inline void otaEnviarStatus(uint8_t status, const char *mensagem) {
     }
 }
 
-
+// Chamado de dentro do OnDataRecv - so enfileira, NUNCA grava na flash
+// aqui. Gravar na flash (Update.write) de dentro do callback de
+// recepcao do ESP-NOW trava a aplicacao silenciosamente: o radio
+// continua confirmando entrega em hardware pro remetente, mas o
+// codigo para de rodar. Por isso o trabalho pesado fica em
+// otaProcessarPendencias(), chamado do loop() principal.
 inline bool otaProcessarPacote(const uint8_t *mac_addr, const uint8_t *dadosRecebidos, int len) {
     if (len != sizeof(ota_pacote_t)) return false;
 
@@ -67,6 +83,8 @@ inline bool otaProcessarPacote(const uint8_t *mac_addr, const uint8_t *dadosRece
         memcpy(otaFilaMac[otaFilaEntrada], mac_addr, 6);
         otaFilaEntrada = (otaFilaEntrada + 1) % OTA_FILA_TAMANHO;
         otaFilaCount++;
+    } else {
+        otaFilaDescartados++;
     }
     portEXIT_CRITICAL_ISR(&otaMux);
 
@@ -79,15 +97,23 @@ inline void otaProcessarUm(const ota_pacote_t &pacote) {
             otaTamanhoTotal = pacote.tamanho_total;
             otaBytesRecebidos = 0;
             otaIndiceEsperado = 0;
+            otaTeveErro = false;
 
             Serial.print("[OTA] INICIO recebido, tamanho total: ");
             Serial.println(otaTamanhoTotal);
 
+            // Limpa qualquer estado deixado por uma tentativa anterior
+            // que nao tenha terminado limpo (travou, resetou no meio,
+            // etc.) - sem isso, Update.begin() pode recusar em
+            // silencio, sem setar nenhum erro especifico.
+            Update.abort();
+
             if (!Update.begin(otaTamanhoTotal)) {
                 otaEmAndamento = false;
-                Serial.print("[OTA] Update.begin FALHOU: ");
-                Serial.println(Update.errorString());
-                otaEnviarStatus(1, "Update.begin falhou");
+                char msg[64];
+                snprintf(msg, sizeof(msg), "Update.begin falhou: %s", Update.errorString());
+                Serial.println(msg);
+                otaEnviarStatus(1, msg);
                 return;
             }
 
@@ -98,7 +124,10 @@ inline void otaProcessarUm(const ota_pacote_t &pacote) {
 
         case OTA_TIPO_DADO: {
             if (!otaEmAndamento) {
-                otaEnviarStatus(1, "dado recebido sem INICIO");
+                char msg[64];
+                snprintf(msg, sizeof(msg), "sem INICIO idx=%u desc=%u",
+                         (unsigned)pacote.indice, (unsigned)otaFilaDescartados);
+                otaEnviarStatus(1, msg);
                 return;
             }
 
@@ -110,8 +139,8 @@ inline void otaProcessarUm(const ota_pacote_t &pacote) {
                 otaEmAndamento = false;
                 Update.abort();
                 char msg[64];
-                snprintf(msg, sizeof(msg), "pacote fora de ordem: esperava %u, veio %u",
-                         (unsigned)otaIndiceEsperado, (unsigned)pacote.indice);
+                snprintf(msg, sizeof(msg), "fora ordem esp=%u veio=%u desc=%u",
+                         (unsigned)otaIndiceEsperado, (unsigned)pacote.indice, (unsigned)otaFilaDescartados);
                 otaEnviarStatus(1, msg);
                 return;
             }
@@ -138,7 +167,7 @@ inline void otaProcessarUm(const ota_pacote_t &pacote) {
                 otaEmAndamento = false;
                 Update.abort();
                 char msg[64];
-                snprintf(msg, sizeof(msg), "contagem de pacotes nao bate: ponte contou %u, recebi %u",
+                snprintf(msg, sizeof(msg), "contagem nao bate: ponte=%u recebi=%u",
                          (unsigned)pacote.indice, (unsigned)otaIndiceEsperado);
                 otaEnviarStatus(1, msg);
                 return;
@@ -169,6 +198,9 @@ inline void otaProcessarUm(const ota_pacote_t &pacote) {
     }
 }
 
+// Chame isso no loop() principal, o mais frequente possivel - e aqui
+// que o trabalho pesado (gravacao na flash) realmente acontece agora,
+// fora do contexto do callback de recepcao.
 inline void otaProcessarPendencias() {
     while (true) {
         bool temPacote = false;

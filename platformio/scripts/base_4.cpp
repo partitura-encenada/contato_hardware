@@ -1,6 +1,7 @@
 #include <esp_now.h>                    
 #include <WiFi.h>                       
 #include "esp_wifi.h"   
+#include "ota_receptor.h"
 
 const int CANAL_ESPECIFICO = 1;     
 uint8_t macTransmissor[] = {0x14, 0x33, 0x5C, 0x52, 0x4D, 0xE0};
@@ -33,6 +34,8 @@ void enviarControle(uint8_t ativo) {
 }
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
+    if (otaProcessarPacote(mac_addr, incomingData, len)) return;
+
     if (memcmp(mac_addr, macTransmissor, 6) != 0) return;
     if (len != sizeof(struct_message)) return;
 
@@ -69,6 +72,8 @@ void setup() {
 }
 
 void loop() {
+    otaProcessarPendencias();
+
     if (Serial.available() > 0) {
         char cmd[16] = {0};
 

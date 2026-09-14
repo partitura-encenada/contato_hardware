@@ -13,7 +13,7 @@
 
 const int LED_AZUL = 2;
 const uint8_t ID = 6;
-const uint8_t MEU_SLOT = 3;        
+const uint8_t MEU_SLOT = 5;        
 const int CANAL = 1;
 uint8_t broadcastAddress[] = {0x14, 0x08, 0x08, 0xA4, 0x59, 0xE8};
 const int delay_time = 10;

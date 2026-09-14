@@ -6,19 +6,18 @@
 #include "esp_log.h"
 #include "ota_receptor.h"
 
-// #define USE_DELAY
-// #define AUTO_CALLIBRATION
-// #define PRINT_MAC       
+#define USE_DELAY
+// #define PRINT_MAC      
 // #define PRINT_CANAL     
 // #define PRINT_SENSOR     
 
+const int LED_AZUL = 2;
 const uint8_t ID = 1;
 const uint8_t MEU_SLOT = 1;         
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x14, 0x33, 0x5C, 0x52, 0x36, 0x70}; 
+uint8_t broadcastAddress[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
-const int callibration_time = 6;
 
 typedef struct {
     uint8_t slot_atual;
@@ -47,15 +46,29 @@ float       ypr[3];
 message_t message;
 esp_now_peer_info_t peerInfo;
 volatile bool meu_slot_aberto = false;
+volatile bool transmissaoAtiva = false;
+
+typedef struct {
+    uint8_t ativo;
+} controle_t;
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
     if (otaProcessarPacote(mac_addr, incomingData, len)) return;
 
-    if (len != sizeof(beacon_t)) return;
-    beacon_t beacon;
-    memcpy(&beacon, incomingData, sizeof(beacon_t));
-    if (beacon.slot_atual == MEU_SLOT) {
-        meu_slot_aberto = true;
+    if (len == sizeof(beacon_t)) {
+        beacon_t beacon;
+        memcpy(&beacon, incomingData, sizeof(beacon_t));
+        if (beacon.slot_atual == MEU_SLOT) {
+            meu_slot_aberto = true;
+        }
+        return;
+    }
+
+    if (len == sizeof(controle_t)) {
+        controle_t controle;
+        memcpy(&controle, incomingData, sizeof(controle_t));
+        transmissaoAtiva = (controle.ativo == 1);
+        return;
     }
 }
 
@@ -79,6 +92,7 @@ void setup() {
     Wire.begin();
     Wire.setClock(400000);
     Serial.begin(115200);
+    pinMode(LED_AZUL, OUTPUT);
     esp_log_level_set("*", ESP_LOG_NONE);
 
     mpu.initialize();
@@ -87,19 +101,14 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    #ifndef AUTO_CALLIBRATION
-        mpu.setZAccelOffset(1592);
-        mpu.setXGyroOffset(161);
-        mpu.setYGyroOffset(-39);
-        mpu.setZGyroOffset(49);
-    #endif
+    mpu.setXAccelOffset(1420);
+    mpu.setYAccelOffset(-2999);
+    mpu.setZAccelOffset(3384);
+    mpu.setXGyroOffset(-157);
+    mpu.setYGyroOffset(-39);
+    mpu.setZGyroOffset(75);
 
     if (dev_status == 0) {
-        #ifdef AUTO_CALLIBRATION
-            mpu.CalibrateAccel(callibration_time);
-            mpu.CalibrateGyro(callibration_time);
-            mpu.PrintActiveOffsets();
-        #endif
         dmp_ready = true;
         packet_size = mpu.dmpGetFIFOPacketSize();
     } else {
@@ -162,6 +171,11 @@ void loop() {
         message.accel = (int32_t)aaReal.x;
         message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
 
+        digitalWrite(
+            LED_AZUL,
+            transmissaoAtiva && message.touch
+        );
+
         #ifdef PRINT_SENSOR
             char buf[64];
             snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
@@ -174,6 +188,8 @@ void loop() {
 
     if (meu_slot_aberto) {
         meu_slot_aberto = false;
-        esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
+        if (transmissaoAtiva) {
+            esp_now_send(broadcastAddress, (uint8_t *)&message, sizeof(message));
+        }
     }
 }

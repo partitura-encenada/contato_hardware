@@ -101,12 +101,12 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    mpu.setXAccelOffset(1420);
-    mpu.setYAccelOffset(-2999);
-    mpu.setZAccelOffset(3384);
-    mpu.setXGyroOffset(-157);
-    mpu.setYGyroOffset(-39);
-    mpu.setZGyroOffset(75);
+    mpu.setXAccelOffset(-2110);
+    mpu.setYAccelOffset(1565);
+    mpu.setZAccelOffset(2632);
+    mpu.setXGyroOffset(13);
+    mpu.setYGyroOffset(15);
+    mpu.setZGyroOffset(34);
 
     if (dev_status == 0) {
         dmp_ready = true;

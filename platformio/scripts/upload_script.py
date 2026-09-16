@@ -15,6 +15,7 @@ else:
         os.path.join(project_dir, "scripts", "equip"),
         os.path.join(project_dir, "scripts", "base"),
         os.path.join(project_dir, "scripts", "util"),
+        os.path.join(project_dir, "scripts", "B"),        
     ]
 
     src_file = None

@@ -1,23 +1,25 @@
 #include <esp_now.h>                    
 #include <WiFi.h>                       
 #include "esp_wifi.h"   
-#include "ota_receptor.h"
+#include "ota_receptor.h" 
 
 const int CANAL_ESPECIFICO = 1;     
-uint8_t macTransmissor[] = {0x84, 0x1F, 0xE8, 0x1B, 0xBD, 0x40};
-const uint8_t BASE_ID = 6;
+uint8_t macTransmissor[] = {0x1C, 0x69, 0x20, 0xA4, 0x14, 0x94}; 
+const uint8_t BASE_ID = 5;
 
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
-    int32_t  accel;
+    int32_t  accel_x;
+    int32_t  accel_y;
+    int32_t  accel_z;
     uint8_t  touch;
 } struct_message;
 
 static struct_message MIDImessage;
 static struct_message bufferMessage;
 volatile bool newData = false;
-bool serialAtivo = false;
+bool serialAtivo = false; 
 uint32_t ultimoReenvio = 0;
 
 typedef struct {
@@ -25,7 +27,7 @@ typedef struct {
 } controle_t;
 
 esp_now_peer_info_t peerEquip;
-portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; 
 
 void enviarControle(uint8_t ativo) {
     controle_t ctrl;
@@ -103,11 +105,13 @@ void loop() {
         newData = false;
         portEXIT_CRITICAL(&mux);
 
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%d/%d/%d/%d",
+        char buf[96];
+        snprintf(buf, sizeof(buf), "%d/%d/%ld/%ld/%ld/%d",
                  bufferMessage.id,
                  bufferMessage.gyro,
-                 bufferMessage.accel,
+                 (long)bufferMessage.accel_x,
+                 (long)bufferMessage.accel_y,
+                 (long)bufferMessage.accel_z,
                  bufferMessage.touch);
 
         int len = strlen(buf) + 2;

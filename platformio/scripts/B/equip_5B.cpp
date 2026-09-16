@@ -1,3 +1,4 @@
+// ═════════ Bibliotecas ═════════
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <esp_now.h>
 #include <WiFi.h>
@@ -6,18 +7,20 @@
 #include "esp_log.h"
 #include "ota_receptor.h"
 
+
 #define USE_DELAY
 // #define PRINT_MAC      
 // #define PRINT_CANAL     
-#define PRINT_SENSOR    
+// #define PRINT_SENSOR    
 
 const int LED_AZUL = 2;
-const uint8_t ID = 6;
-const uint8_t MEU_SLOT = 5;        
+const uint8_t ID = 5;
+const uint8_t MEU_SLOT = 4;  
 const int CANAL = 1;
-uint8_t broadcastAddress[] = {0x14, 0x08, 0x08, 0xA4, 0x59, 0xE8};
+uint8_t broadcastAddress[] = {0x88, 0x57, 0x21, 0xAD, 0x59, 0x40}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
+
 
 typedef struct {
     uint8_t slot_atual;
@@ -27,7 +30,9 @@ typedef struct {
 typedef struct {
     uint8_t  id;
     int16_t  gyro;
-    int32_t  accel;
+    int32_t  accel_x;
+    int32_t  accel_y;
+    int32_t  accel_z;
     uint8_t  touch;
 } message_t;
 
@@ -101,12 +106,12 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    mpu.setXAccelOffset(-2228);
-    mpu.setYAccelOffset(-1953);
-    mpu.setZAccelOffset(3546);
-    mpu.setXGyroOffset(49);
-    mpu.setYGyroOffset(-30);
-    mpu.setZGyroOffset(-6);
+    mpu.setXAccelOffset(-2110);
+    mpu.setYAccelOffset(1565);
+    mpu.setZAccelOffset(2632);
+    mpu.setXGyroOffset(13);
+    mpu.setYGyroOffset(15);
+    mpu.setZGyroOffset(34);
 
     if (dev_status == 0) {
         dmp_ready = true;
@@ -166,10 +171,12 @@ void loop() {
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
 
-        message.id    = ID;
-        message.gyro  = (int16_t)(ypr[2] * 180 / M_PI);
-        message.accel = (int32_t)aaReal.x;
-        message.touch = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
+        message.id      = ID;
+        message.gyro    = (int16_t)(ypr[2] * 180 / M_PI);
+        message.accel_x = (int32_t)aaReal.x;
+        message.accel_y = (int32_t)aaReal.y;
+        message.accel_z = (int32_t)aaReal.z;
+        message.touch   = (touchRead(T3) < touch_sensitivity) ? 1 : 0;
 
         digitalWrite(
             LED_AZUL,
@@ -177,9 +184,13 @@ void loop() {
         );
 
         #ifdef PRINT_SENSOR
-            char buf[64];
-            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel:%d touch:%d",
-                     message.id, message.gyro, message.accel, message.touch);
+            char buf[96];
+            snprintf(buf, sizeof(buf), "id:%d gyro:%d accel_x:%ld accel_y:%ld accel_z:%ld touch:%d",
+                     message.id, message.gyro,
+                     (long)message.accel_x,
+                     (long)message.accel_y,
+                     (long)message.accel_z,
+                     message.touch);
             Serial.println(buf);
         #endif
     } else {

@@ -24,6 +24,7 @@ uint8_t PONTE_MAC[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; // MAC do ESP32 pont
 
 MPU6050 mpu;
 const int callibration_time = 6;
+const int touch_sensitivity = 20;
 
 typedef struct {
     int16_t offset_accel_x;
@@ -96,6 +97,12 @@ void setup() {
         Serial.print("ERRO DMP: ");
         Serial.println(dev_status);
         return;
+    }
+
+    Serial.println("Pronto. Encoste no toque para iniciar a calibracao.");
+
+    while (touchRead(T3) >= touch_sensitivity) {
+        delay(50);
     }
 
     Serial.println("Calibrando... nao mexa no sensor.");

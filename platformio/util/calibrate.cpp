@@ -1,15 +1,3 @@
-// ═════════ Calibracao MPU6050 por ESP-NOW ═════════
-// Roda CalibrateAccel/CalibrateGyro e manda o resultado pra ponte por
-// ESP-NOW. Mantem o receptor OTA ativo depois de terminar, pra voce
-// conseguir subir o firmware normal do equip em seguida sem precisar
-// de USB.
-//
-// Fluxo: contato calibrar --id X --porta COM... compila e envia este
-// arquivo via ponte (mesmo protocolo do `contato ota`). Depois que a
-// calibracao termina e o resultado e enviado, o equip fica parado
-// (loop() vazio) esperando o proximo OTA - que vai ser o firmware de
-// verdade do equip, com os offsets ja preenchidos a mao.
-
 #include "MPU6050_6Axis_MotionApps20.h"
 #include "Wire.h"
 #include <esp_now.h>
@@ -17,14 +5,29 @@
 #include "esp_wifi.h"
 #include "esp_log.h"
 #include "ota_receptor.h"
+#include <Preferences.h>
 
-// ═════════ ALTERAR POR CONJUNTO ═════════
-const int CANAL = 1; // TEM que ser o mesmo canal do resto do sistema
-uint8_t PONTE_MAC[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; // MAC do ESP32 ponte
+
+const int CANAL = 1;
+uint8_t PONTE_MAC[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; 
 
 MPU6050 mpu;
 const int callibration_time = 6;
 const int touch_sensitivity = 20;
+
+const char *PREF_NAMESPACE = "contato";
+const char *PREF_KEY_OFFS  = "mpu_offs";
+
+typedef struct {
+    int16_t accelX;
+    int16_t accelY;
+    int16_t accelZ;
+    int16_t gyroX;
+    int16_t gyroY;
+    int16_t gyroZ;
+} MPUOffsets;
+
+Preferences prefs;
 
 typedef struct {
     int16_t offset_accel_x;
@@ -37,10 +40,6 @@ typedef struct {
 
 esp_now_peer_info_t peerPonte;
 
-// ═════════ Callback de recepcao - so existe pra atender OTA ═════════
-// Depois da calibracao, o equip so aceita novos pacotes OTA (pra
-// receber o firmware normal em seguida). Qualquer outra coisa e
-// ignorada por otaProcessarPacote (retorna false).
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *incomingData, int len) {
     otaProcessarPacote(mac_addr, incomingData, len);
 }
@@ -54,8 +53,6 @@ void enviarResultado(calibracao_resultado_t &resultado) {
         esp_now_add_peer(&peerPonte);
     }
 
-    // Sem confirmacao de entrega aqui (diferente do fluxo de OTA) -
-    // manda varias vezes de proposito pra aumentar a chance de chegar.
     for (int i = 0; i < 5; i++) {
         esp_now_send(PONTE_MAC, (uint8_t *)&resultado, sizeof(resultado));
         delay(100);
@@ -118,6 +115,25 @@ void setup() {
     resultado.offset_gyro_y  = mpu.getYGyroOffset();
     resultado.offset_gyro_z  = mpu.getZGyroOffset();
 
+    MPUOffsets offs;
+    offs.accelX = resultado.offset_accel_x;
+    offs.accelY = resultado.offset_accel_y;
+    offs.accelZ = resultado.offset_accel_z;
+    offs.gyroX  = resultado.offset_gyro_x;
+    offs.gyroY  = resultado.offset_gyro_y;
+    offs.gyroZ  = resultado.offset_gyro_z;
+
+    prefs.begin(PREF_NAMESPACE, false);
+    size_t wrote = prefs.putBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets));
+    prefs.end();
+
+    if (wrote == sizeof(MPUOffsets)) {
+        Serial.println("Offsets salvos na NVS.");
+    } else {
+        Serial.printf("ERRO salvando offsets na NVS: escreveu %u de %u bytes\n",
+                      (unsigned)wrote, (unsigned)sizeof(MPUOffsets));
+    }
+
     enviarResultado(resultado);
 
     Serial.println("Resultado enviado para a ponte. Aguardando proximo OTA.");
@@ -126,5 +142,4 @@ void setup() {
 void loop() {
     otaProcessarPendencias();
 
-    // Nada aqui - so espera o proximo OTA (firmware normal do equip).
 }

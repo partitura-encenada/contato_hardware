@@ -3,7 +3,7 @@
 #include "esp_wifi.h"   
 #include "ota_receptor.h"
 
-const int CANAL_ESPECIFICO = 1;     
+const int CANAL_ESPECIFICO = 11;     
 uint8_t macTransmissor[] = {0x1C, 0x69, 0x20, 0xA4, 0x14, 0x94}; 
 const uint8_t BASE_ID = 5;
 

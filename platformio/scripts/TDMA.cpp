@@ -4,7 +4,7 @@
 #include "esp_log.h"
 #include "ota_receptor.h"
 
-const int      CANAL      = 1;
+const int      CANAL      = 11;
 const int      NUM_EQUIPS = 6;
 const uint32_t SLOT_US    = 1500; 
 

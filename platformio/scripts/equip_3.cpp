@@ -5,7 +5,6 @@
 #include "esp_wifi.h"
 #include "esp_log.h"
 #include "ota_receptor.h"
-#include <Preferences.h>
 
 #define USE_DELAY
 // #define PRINT_MAC      
@@ -15,24 +14,10 @@
 const int LED_AZUL = 2;
 const uint8_t ID = 3;
 const uint8_t MEU_SLOT = 2;     
-const int CANAL = 1;
+const int CANAL = 11;
 uint8_t broadcastAddress[] = {0x84, 0x1F, 0xE8, 0x1A, 0x83, 0x1C}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;
-
-const char *PREF_NAMESPACE = "contato";
-const char *PREF_KEY_OFFS  = "mpu_offs";
-
-typedef struct {
-    int16_t accelX;
-    int16_t accelY;
-    int16_t accelZ;
-    int16_t gyroX;
-    int16_t gyroY;
-    int16_t gyroZ;
-} MPUOffsets;
-
-Preferences prefs;
 
 typedef struct {
     uint8_t slot_atual;
@@ -116,28 +101,12 @@ void setup() {
     dev_status = mpu.dmpInitialize();
     mpu.setDMPEnabled(true);
 
-    prefs.begin(PREF_NAMESPACE, true);
-    MPUOffsets offs;
-    bool have_offsets = prefs.getBytes(PREF_KEY_OFFS, &offs, sizeof(MPUOffsets)) == sizeof(MPUOffsets);
-    prefs.end();
-
-    if (have_offsets) {
-        mpu.setXAccelOffset(offs.accelX);
-        mpu.setYAccelOffset(offs.accelY);
-        mpu.setZAccelOffset(offs.accelZ);
-        mpu.setXGyroOffset(offs.gyroX);
-        mpu.setYGyroOffset(offs.gyroY);
-        mpu.setZGyroOffset(offs.gyroZ);
-        Serial.println("Offsets carregados da NVS.");
-    } else {
-        mpu.setXAccelOffset(1420);
-        mpu.setYAccelOffset(-2999);
-        mpu.setZAccelOffset(3384);
-        mpu.setXGyroOffset(-157);
-        mpu.setYGyroOffset(-39);
-        mpu.setZGyroOffset(75);
-        Serial.println("Nenhum offset salvo na NVS - usando valores padrao do codigo.");
-    }
+    mpu.setXAccelOffset(1420);
+    mpu.setYAccelOffset(-2999);
+    mpu.setZAccelOffset(3384);
+    mpu.setXGyroOffset(-157);
+    mpu.setYGyroOffset(-39);
+    mpu.setZGyroOffset(75);
 
     if (dev_status == 0) {
         dmp_ready = true;

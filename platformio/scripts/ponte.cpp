@@ -3,7 +3,7 @@
 #include "esp_wifi.h"
 #include "esp_log.h"
 
-const int CANAL = 1; 
+const int CANAL = 11; 
 
 #define OTA_TIPO_INICIO  0xAA
 #define OTA_TIPO_DADO    0xBB

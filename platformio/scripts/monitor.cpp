@@ -18,12 +18,12 @@ typedef struct {
 } equip_conhecido_t;
 
 const equip_conhecido_t EQUIPS_CONHECIDOS[] = {
-    {{0x1C, 0x69, 0x20, 0xA4, 0x14, 0x94}, 1},
-    {{0x84, 0x1F, 0xE8, 0x1C, 0x72, 0x5C}, 2},
+    {{0x80, 0xF3, 0xDA, 0x61, 0xCD, 0xAC}, 1},
+    {{0x1C, 0x69, 0x20, 0xA3, 0xF0, 0xBC}, 2},
     {{0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4}, 3},
     {{0x14, 0x33, 0x5C, 0x52, 0x4D, 0xE0}, 4},
-    {{0xF8, 0xB3, 0xB7, 0x50, 0xCC, 0xEC}, 7},
-    {{0x1C, 0x69, 0x20, 0xA2, 0xE2, 0x14}, 8},
+    {{0x1C, 0x69, 0x20, 0xA4, 0x14, 0x94}, 5},
+    {{0x84, 0x1F, 0xE8, 0x1B, 0xBD, 0x40}, 6},
 };
 const int NUM_EQUIPS_CONHECIDOS = sizeof(EQUIPS_CONHECIDOS) / sizeof(EQUIPS_CONHECIDOS[0]);
 
@@ -69,14 +69,26 @@ bool macIgual(const uint8_t *a, const uint8_t *b) {
     return memcmp(a, b, 6) == 0;
 }
 
-int idParaMac(const uint8_t *mac) {
+int idxParaMac(const uint8_t *mac) {
     for (int i = 0; i < NUM_EQUIPS_CONHECIDOS; i++) {
         if (macIgual(mac, EQUIPS_CONHECIDOS[i].mac)) {
-            return EQUIPS_CONHECIDOS[i].id;
+            return i;
         }
     }
     return -1;
 }
+
+int idParaMac(const uint8_t *mac) {
+    int idx = idxParaMac(mac);
+    return (idx == -1) ? -1 : EQUIPS_CONHECIDOS[idx].id;
+}
+
+typedef struct {
+    int32_t  ultimaSeq;       // -1 = ainda nao visto
+    uint32_t pacotesPerdidos; // acumulado na janela atual, via buracos no seq_ctrl 802.11
+} rastreio_seq_t;
+
+rastreio_seq_t rastreioEquips[NUM_EQUIPS_CONHECIDOS];
 
 void sniffer(void* buf, wifi_promiscuous_pkt_type_t type) {
     if (type != WIFI_PKT_MGMT && type != WIFI_PKT_DATA && type != WIFI_PKT_CTRL) {
@@ -124,6 +136,23 @@ void sniffer(void* buf, wifi_promiscuous_pkt_type_t type) {
             bytesTransbordo += tamanho;
         }
     }
+
+    int idxConhecido = idxParaMac(origem);
+    if (idxConhecido != -1) {
+        uint16_t seqNum = ipkt->hdr.seq_ctrl >> 4;
+        rastreio_seq_t &rastreio = rastreioEquips[idxConhecido];
+        if (rastreio.ultimaSeq != -1) {
+            uint16_t esperado = (rastreio.ultimaSeq + 1) & 0x0FFF;
+            if (seqNum != esperado) {
+                uint16_t diff = (seqNum - esperado) & 0x0FFF;
+                if (diff < 100) {
+                    rastreio.pacotesPerdidos += diff;
+                }
+            }
+        }
+        rastreio.ultimaSeq = seqNum;
+    }
+
     portEXIT_CRITICAL(&mux);
 }
 
@@ -139,6 +168,7 @@ struct RelatorioJanela {
     int numEstacoes;
     uint32_t transbordoPacotes;
     uint32_t transbordoBytes;
+    uint32_t pacotesPerdidos[NUM_EQUIPS_CONHECIDOS];
 };
 
 void imprimirRelatorio(const RelatorioJanela &r) {
@@ -161,13 +191,14 @@ void imprimirRelatorio(const RelatorioJanela &r) {
 
     uint32_t pacotesConhecidos = 0;
     for (int i = 0; i < r.numEstacoes; i++) {
-        int id = idParaMac(r.estacoes[i].mac);
-        if (id == -1) continue;
+        int idx = idxParaMac(r.estacoes[i].mac);
+        if (idx == -1) continue;
         pacotesConhecidos += r.estacoes[i].pacotes;
 
-        Serial.print("  Equip ID "); Serial.print(id);
+        Serial.print("  Equip ID "); Serial.print(EQUIPS_CONHECIDOS[idx].id);
         Serial.print("  pacotes/s: "); Serial.print(r.estacoes[i].pacotes);
         Serial.print("  bytes/s: "); Serial.print(r.estacoes[i].bytes);
+        Serial.print("  perdidos/s: "); Serial.print(r.pacotesPerdidos[idx]);
         Serial.print("  RSSI medio: "); Serial.print((float)r.estacoes[i].somaRSSI / r.estacoes[i].pacotes);
         Serial.println(" dBm");
     }
@@ -226,6 +257,11 @@ void escanearRedes() {
 void setup() {
     Serial.begin(115200);
 
+    for (int i = 0; i < NUM_EQUIPS_CONHECIDOS; i++) {
+        rastreioEquips[i].ultimaSeq = -1;
+        rastreioEquips[i].pacotesPerdidos = 0;
+    }
+
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
 
@@ -274,6 +310,10 @@ void loop() {
         memcpy(r.estacoes, estacoes, sizeof(estacao_t) * numEstacoes);
         r.transbordoPacotes = pacotesTransbordo;
         r.transbordoBytes   = bytesTransbordo;
+        for (int i = 0; i < NUM_EQUIPS_CONHECIDOS; i++) {
+            r.pacotesPerdidos[i] = rastreioEquips[i].pacotesPerdidos;
+            rastreioEquips[i].pacotesPerdidos = 0;
+        }
 
         pacotesTotal = 0; bytesTotal = 0; pacotesForte = 0;
         somaRSSI = 0; maiorRSSI = -127; menorRSSI = 0;

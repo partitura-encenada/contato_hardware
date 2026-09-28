@@ -8,7 +8,7 @@
 #include <Preferences.h>
 
 
-const int CANAL = 1;
+const int CANAL = 11;
 uint8_t PONTE_MAC[] = {0x14, 0x33, 0x5C, 0x2D, 0xF3, 0x68}; 
 
 MPU6050 mpu;

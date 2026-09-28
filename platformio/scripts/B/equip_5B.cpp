@@ -16,7 +16,7 @@
 const int LED_AZUL = 2;
 const uint8_t ID = 5;
 const uint8_t MEU_SLOT = 4;  
-const int CANAL = 1;
+const int CANAL = 11;
 uint8_t broadcastAddress[] = {0x88, 0x57, 0x21, 0xAD, 0x59, 0x40}; 
 const int delay_time = 10;
 const int touch_sensitivity = 20;

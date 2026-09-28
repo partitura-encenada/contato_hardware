@@ -8,7 +8,7 @@
 #include "esp_wifi.h"
 #include "esp_log.h"
 
-const int CANAL = 8;
+const int CANAL = 11;
 
 // MAC do equip_3
 uint8_t macTransmissor[] = {0x68, 0x25, 0xDD, 0x32, 0x88, 0xB4};

@@ -14,6 +14,7 @@ O sistema é baseado em módulos **ESP32 DEVKIT V1**. Cada **Equip** (vestível)
 * Build e upload
 * Atualização por rádio (OTA)
 * Calibração
+* Equip e Base 6DOF (diagnóstico)
 * Hardware
 
 ## Arquitetura
@@ -91,6 +92,7 @@ contato_hardware/
     ├── scripts/          # firmwares gravados nos dispositivos
     │   ├── equip_1..6.cpp
     │   ├── base_1..6.cpp
+    │   ├── equip_6DOF.cpp / base_6DOF.cpp  # diagnóstico: 6 eixos do MPU6050
     │   ├── ponte.cpp
     │   ├── TDMA.cpp
     │   ├── monitor.cpp
@@ -136,6 +138,61 @@ O fluxo normalmente é feito pelo `contato_cli` (`contato ota`, `contato update-
 ## Calibração
 
 O `util/calibrate.cpp` calcula os offsets do MPU6050. O comando `contato calibrate` do `contato_cli` o executa no Equip e mostra os offsets obtidos. Depois, copie os valores para as chamadas `setXAccelOffset`, `setYAccelOffset`, `setZAccelOffset`, `setXGyroOffset`, `setYGyroOffset` e `setZGyroOffset` do `equip_N.cpp` correspondente.
+
+## Equip e Base 6DOF (diagnóstico)
+
+Par de firmwares para **ver todos os eixos do MPU6050**, usado só em testes. Funciona igual ao `equip_N`/`base_N` (TDMA, START/STOP, OTA, toque, LED), mas em vez de mandar só o *roll* e a aceleração em X, manda os **6 eixos**: 3 de rotação e 3 de aceleração.
+
+| Arquivo | Função |
+|---|---|
+| `scripts/equip_6DOF.cpp` | Lê o sensor e envia os 6 eixos na posição do TDMA |
+| `scripts/base_6DOF.cpp` | Recebe e repassa ao PC; é a mesma para os dois modos |
+
+### Brutos ou tratados
+
+Quem escolhe é a constante `RAW_DATA` no topo do `equip_6DOF.cpp`. A base não muda.
+
+| `RAW_DATA` | Modo | `rot` (3 valores) | `acc` (3 valores) |
+|---|---|---|---|
+| `true` (padrão) | **B** — brutos | giroscópio X/Y/Z, ±2000 °/s → **÷ 16,4 = °/s** | acelerômetro X/Y/Z **com** gravidade, ±2 g → **÷ 16384 = g** |
+| `false` | **T** — tratados pelo DMP | yaw/pitch/roll em **graus** | aceleração linear X/Y/Z **sem** gravidade → **÷ 8192 = g** |
+
+- No modo **T** o tratamento é o mesmo do `equip_N`: o *roll* é o `gyro` e a aceleração X é o `accel` que o `equip_N` envia.
+- No modo **B** os offsets de calibração continuam aplicados (ficam gravados no próprio sensor), e a faixa e o filtro (DLPF 42 Hz) são os mesmos que o DMP usa, para os dois modos serem comparáveis. O sensor é lido a cada 2 ms (`RAW_READ_INTERVAL_US`).
+- Para trocar de modo: mude `RAW_DATA` e grave o `equip_6DOF` de novo.
+
+### Mensagem (`message_6dof_t`, 15 bytes)
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | `uint8_t` | ID do Equip |
+| `mode` | `uint8_t` | `'B'` (brutos) ou `'T'` (tratados) |
+| `rot[3]` | `int16_t` | rotação X/Y/Z |
+| `acc[3]` | `int16_t` | aceleração X/Y/Z |
+| `touch` | `uint8_t` | 1 se o sensor capacitivo está tocado |
+
+A struct é `packed` (sem bytes de alinhamento), então equip e base leem os campos sempre nas mesmas posições. Por isso o equip lê o sensor em variáveis locais antes de copiar: um ponteiro para campo `packed` pode ficar desalinhado e travar o ESP32. A mensagem tem 3 bytes a mais que a `message_t` (~24 µs a mais no ar a 1 Mbps), bem dentro da posição de 1500 µs do TDMA.
+
+A base escreve na serial uma linha por mensagem:
+
+```text
+id/modo/rot_x/rot_y/rot_z/acc_x/acc_y/acc_z/touch
+6/B/164/-328/0/0/0/16384/1
+```
+
+O `contato connect` **não** lê esse formato (descarta as linhas). Para ver os dados use `contato diag-6dof` do [contato_cli](../contato_cli).
+
+### Como usar
+
+1. Ajuste as linhas marcadas com `ALTERAR` nos dois arquivos. Os valores atuais são do equip 6 / base 6: ID, `MY_SLOT`, MACs e offsets.
+2. Grave os dois, por exemplo por OTA:
+   ```powershell
+   contato ota --id 6 --script equip_6DOF --port COM7
+   contato ota --base 6 --script base_6DOF --port COM7
+   ```
+3. Leia os dados: `contato diag-6dof --id 6`.
+
+O `monitor.cpp` mede tudo desse equip (pacotes, perdas, atraso), menos as trocas de toque, porque reconhece a mensagem pelo tamanho (12 ou 20 bytes).
 
 ## Hardware
 

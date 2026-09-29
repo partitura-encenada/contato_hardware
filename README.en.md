@@ -14,6 +14,7 @@ The system is built around **ESP32 DEVKIT V1** modules. Each **Equip** (wearable
 * Build and upload
 * Over-the-air update (OTA)
 * Calibration
+* 6DOF Equip and Base (diagnostics)
 * Hardware
 
 ## Architecture
@@ -91,6 +92,7 @@ contato_hardware/
     ├── scripts/          # firmware flashed to the devices
     │   ├── equip_1..6.cpp
     │   ├── base_1..6.cpp
+    │   ├── equip_6DOF.cpp / base_6DOF.cpp  # diagnostics: all 6 MPU6050 axes
     │   ├── ponte.cpp
     │   ├── TDMA.cpp
     │   ├── monitor.cpp
@@ -136,6 +138,61 @@ The flow is normally run through `contato_cli` (`contato ota`, `contato update-b
 ## Calibration
 
 `util/calibrate.cpp` computes the MPU6050 offsets. The `contato calibrate` command of `contato_cli` runs it on the Equip and prints the resulting offsets. Then copy the values into the `setXAccelOffset`, `setYAccelOffset`, `setZAccelOffset`, `setXGyroOffset`, `setYGyroOffset` and `setZGyroOffset` calls of the matching `equip_N.cpp`.
+
+## 6DOF Equip and Base (diagnostics)
+
+Firmware pair to **see every axis of the MPU6050**, used only for testing. It works like `equip_N`/`base_N` (TDMA, START/STOP, OTA, touch, LED), but instead of sending only the *roll* and the X acceleration, it sends all **6 axes**: 3 rotation and 3 acceleration.
+
+| File | Role |
+|---|---|
+| `scripts/equip_6DOF.cpp` | Reads the sensor and sends the 6 axes in its TDMA slot |
+| `scripts/base_6DOF.cpp` | Receives and forwards to the PC; the same for both modes |
+
+### Raw or processed
+
+The `RAW_DATA` constant at the top of `equip_6DOF.cpp` selects the mode. The base does not change.
+
+| `RAW_DATA` | Mode | `rot` (3 values) | `acc` (3 values) |
+|---|---|---|---|
+| `true` (default) | **B** — raw | gyroscope X/Y/Z, ±2000 °/s → **÷ 16.4 = °/s** | accelerometer X/Y/Z **with** gravity, ±2 g → **÷ 16384 = g** |
+| `false` | **T** — processed by the DMP | yaw/pitch/roll in **degrees** | linear acceleration X/Y/Z **without** gravity → **÷ 8192 = g** |
+
+- Mode **T** uses the same processing as `equip_N`: the *roll* is the `gyro` and the X acceleration is the `accel` sent by `equip_N`.
+- In mode **B** the calibration offsets are still applied (they live in the sensor itself), and range and filter (DLPF 42 Hz) match the DMP settings, so both modes are comparable. The sensor is read every 2 ms (`RAW_READ_INTERVAL_US`).
+- To switch modes: change `RAW_DATA` and flash `equip_6DOF` again.
+
+### Message (`message_6dof_t`, 15 bytes)
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `uint8_t` | Equip ID |
+| `mode` | `uint8_t` | `'B'` (raw) or `'T'` (processed) |
+| `rot[3]` | `int16_t` | rotation X/Y/Z |
+| `acc[3]` | `int16_t` | acceleration X/Y/Z |
+| `touch` | `uint8_t` | 1 if the capacitive sensor is touched |
+
+The struct is `packed` (no padding), so equip and base always read the fields at the same offsets. That is why the equip reads the sensor into local variables before copying: a pointer to a `packed` field may be misaligned and crash the ESP32. The message is 3 bytes larger than `message_t` (~24 µs more airtime at 1 Mbps), well within the 1500 µs TDMA slot.
+
+The base writes one serial line per message:
+
+```text
+id/mode/rot_x/rot_y/rot_z/acc_x/acc_y/acc_z/touch
+6/B/164/-328/0/0/0/16384/1
+```
+
+`contato connect` does **not** read this format (it drops those lines). To see the data use `contato diag-6dof` from [contato_cli](../contato_cli).
+
+### How to use
+
+1. Adjust the lines marked `ALTERAR` in both files. Current values are for equip 6 / base 6: ID, `MY_SLOT`, MACs and offsets.
+2. Flash both, e.g. over the air:
+   ```powershell
+   contato ota --id 6 --script equip_6DOF --port COM7
+   contato ota --base 6 --script base_6DOF --port COM7
+   ```
+3. Read the data: `contato diag-6dof --id 6`.
+
+`monitor.cpp` measures everything for this equip (packets, losses, delay) except touch toggles, because it recognises the message by size (12 or 20 bytes).
 
 ## Hardware
 

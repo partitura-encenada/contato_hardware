@@ -4,7 +4,7 @@
 #include "ota_receptor.h"
 
 const int CANAL_ESPECIFICO = 11;     
-uint8_t macTransmissor[] = {0x84, 0x1F, 0xE8, 0x1B, 0xAB, 0x70};
+uint8_t macTransmissor[] = {0x88, 0x57, 0x21, 0x7A, 0xC6, 0x08};
 const uint8_t BASE_ID = 1;
 
 typedef struct {

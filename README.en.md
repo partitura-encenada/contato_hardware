@@ -1,5 +1,5 @@
 # Contato (hardware)
-[![pt-br](https://img.shields.io/badge/lang-pt--br-green.svg)](README.md)
+[![Ler em português](https://img.shields.io/badge/ler%20em-portugu%C3%AAs-green.svg)](README.md)
 
 Embedded firmware for the **Contato** device, developed by the Dance Course at Universidade Federal do Rio de Janeiro in partnership with the UFRJ Technological Park.
 

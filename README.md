@@ -1,5 +1,5 @@
 # Contato (hardware)
-[![en](https://img.shields.io/badge/lang-en-red.svg)](README.en.md)
+[![Read in English](https://img.shields.io/badge/read%20in-English-red.svg)](README.en.md)
 
 Código embarcado para o dispositivo **Contato**, desenvolvido pelo curso de Dança da Universidade Federal do Rio de Janeiro em parceria com o Parque Tecnológico UFRJ.
 
